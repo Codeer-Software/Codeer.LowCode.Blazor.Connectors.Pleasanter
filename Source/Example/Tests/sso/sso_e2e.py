@@ -89,6 +89,11 @@ def clb_current_user(ctx):
     return r.status, r.text()[:60]
 
 
+def clb_anonymous(status, body):
+    # 未ログインの current_user は 200 で空の Id を返す (ログイン済みなら整数の Id。プリザンターでログアウト済みと分かれば 401)
+    return status == 401 or (status == 200 and re.search(r'"value"\s*:\s*""', body or "") is not None)
+
+
 results = {}
 
 
@@ -106,10 +111,10 @@ with sync_playwright() as p:
     st = pg.evaluate(EXTSQL, PLE)
     check("unauth_extended_sql_401", st == 401, f"status={st}"); c.close()
 
-    # 2. Cookie 無し: CLB current_user は 401
+    # 2. Cookie 無し: CLB current_user は未ログイン
     c = b.new_context(ignore_https_errors=True)
-    st, _ = clb_current_user(c)
-    check("clb_no_cookie_401", st == 401, f"status={st}"); c.close()
+    st, body = clb_current_user(c)
+    check("clb_no_cookie_anonymous", clb_anonymous(st, body), f"status={st} body={body}"); c.close()
 
     # 3. パスワードのみ・TOTP 未完了: 拡張SQL 401 かつ CLB 認証 Cookie 無し
     c = b.new_context(ignore_https_errors=True); pg = c.new_page()
@@ -118,10 +123,10 @@ with sync_playwright() as p:
     pg.locator("#Login").first.click(); pg.wait_for_timeout(2500)
     st = pg.evaluate(EXTSQL, PLE)
     pg.goto(f"{CLB}/", wait_until="domcontentloaded"); pg.wait_for_timeout(2500)
-    st2, _ = clb_current_user(c)
+    st2, body2 = clb_current_user(c)
     has_clb = any(x["name"] == ".CLB.Auth" for x in c.cookies())
-    check("pre_totp_rejected", st == 401 and st2 == 401 and not has_clb,
-          f"extsql={st} clb_current_user={st2} clb_cookie={has_clb}"); c.close()
+    check("pre_totp_rejected", st == 401 and clb_anonymous(st2, body2) and not has_clb,
+          f"extsql={st} clb_current_user={st2} {body2} clb_cookie={has_clb}"); c.close()
 
     # 4. パスワード+TOTP 完了 -> CLB に自動ログイン (current_user が整数 Id)
     c = b.new_context(ignore_https_errors=True); pg = c.new_page()

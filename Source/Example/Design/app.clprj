@@ -1,0 +1,14 @@
+{
+  "CurrentUserModuleDesignName": "AppUser",
+  "OmitDefaultValues": true,
+  "Versions": [
+    {
+      "AssemblyName": "Codeer.LowCode.Blazor",
+      "Version": "1.3.68.0"
+    },
+    {
+      "AssemblyName": "Codeer.LowCode.Blazor.Extras",
+      "Version": "0.32.0.0"
+    }
+  ]
+}

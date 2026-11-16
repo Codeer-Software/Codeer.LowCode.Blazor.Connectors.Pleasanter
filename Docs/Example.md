@@ -6,6 +6,7 @@
 | フォルダ | 内容 |
 |---|---|
 | `LowCodeApp.Server` / `LowCodeApp.Client` / `LowCodeApp.Client.Shared` | Web アプリ。コネクターの組み込みは `LowCodeApp.Server/Infrastructure/DataService.cs` の 2 行。SSO は `LowCodeApp.Server/Sso`・`Controllers/AccountController.cs`・`LowCodeApp.Client/wwwroot/index.html` と `sso-login.html` |
+| `Design` | サンプルのデザイン (取引先・案件・作業・取引先別の案件金額・ユーザー) |
 | `Data/main.sql` | ログインするユーザーの表と、最初のユーザー (admin / admin) |
 | `Data/setup-pleasanter.ps1` | プリザンターにサンプルのサイトとデータを作るスクリプト |
 | `Pleasanter/ExtendedSqls/ClbWhoAmI.json` | SSO のためにプリザンターに置く拡張 SQL |
@@ -46,11 +47,34 @@ Sites=Customers:215,Projects:216,Tasks:217
 ### 拡張 SQL を置く (SSO を使うとき)
 
 `Source/Example/Pleasanter/ExtendedSqls/ClbWhoAmI.json` を、プリザンターの `App_Data/Parameters/ExtendedSqls/` にコピーして、プリザンターを再起動します。
-ログイン中の本人 (テナント・利用者の ID・ログイン ID・名前) を返すだけの SQL です。API キーでは呼べず、ブラウザでログインした利用者の Cookie で呼んだときだけ本人が返ります。
+ログイン中の本人 (テナント・利用者の ID・ログイン ID・名前) を返すだけの SQL です。呼んだ人自身の情報だけが返ります (このアプリは、ブラウザでログインした利用者の Cookie で呼びます)。
 
 ## 2. デザイナの設定を作る
 
-(第 2 段階で書く)
+`Source/Example/Design/designer.settings.Development.json` を作ります (リポジトリには入れません)。`Sites` は手順 1 で出た値にします。
+
+```json
+{
+  "ConnectionStrings": {
+    "Main": "Data Source=C:/Codeer.LowCode.Blazor.Local/Data/pleasanter_example.db;",
+    "Pleasanter": "Provider=Pleasanter;Url=http://localhost:59803/;ApiKey=<API キー>;Sites=Customers:215,Projects:216,Tasks:217"
+  },
+  "CurrentDeployInfoName": "local",
+  "DeployInfo": {
+    "local": {
+      "DeployMethod": "FileSystem",
+      "AppName": "App",
+      "Directory": "C:/Codeer.LowCode.Blazor.Local/Designs/Pleasanter"
+    }
+  }
+}
+```
+
+デザイナはプリザンターの表の定義を `Design/pleasanter.Pleasanter.metadata.json` から読みます (プリザンターには取りに行きません)。
+このファイルはサンプルのサイトから書き出したものです。手順 1 でサイトを作り直した・サイト ID が違うとき・プリザンターで項目や選択肢を変えたときは、
+デザイナで Tools > プリザンターのメタ情報を更新 を実行してファイルを書き直します。このときは接続文字列の `ApiKey` に本物のキーが要ります (定義をファイルから読むだけなら要りません)。
+
+接続文字列に API キーを書くので、このファイルはリポジトリの外に出さないでください (`.gitignore` に入れてあります)。
 
 ## 3. ログインするユーザーの DB を作る
 
@@ -62,7 +86,8 @@ LowCodeApp.Designer.exe sql Source/Example/Design --datasource Main --file Sourc
 
 ## 4. デザインを送る
 
-(第 2 段階で書く)
+デザイナで `Source/Example/Design/app.clprj` を開き、デプロイします。`C:\Codeer.LowCode.Blazor.Local\Designs\Pleasanter\App.zip` ができます。
+アプリの `appsettings.Development.json` の `DesignFileDirectory` がこのフォルダを指しています。
 
 ## 5. アプリを起動する
 
@@ -84,13 +109,13 @@ dotnet run --project Source/Example/LowCodeApp.Server --launch-profile http
 プリザンターにログインしているブラウザなら、CLB のログイン画面を出さずに同じ人として入れるようにします。
 
 1. 手順 1 の拡張 SQL を置きます
-2. ログインさせる人を、CLB のユーザー (`app_users`) に登録します。外部ログイン名の列 (`email`) にプリザンターのログイン ID を入れます。
+2. ログインさせる人を、CLB のユーザー (`app_users`) に登録します。admin でログインして「ユーザー」の画面で行を作り、メールの欄 (外部ログイン名の列 `email`) にプリザンターのログイン ID を入れます。
+   登録の無い人がプリザンターでログインすると、待ち画面に「このアプリの利用者として登録されていません」と出ます。
    登録の無い人を入れるときは `AutoProvisionUser` を `true` にします (プリザンターのログイン ID をログイン名にした行を作ります。外部ログイン名の列がログイン名の列と別の設計では作った行を引けないので、事前に登録します)
-3. `PleasanterSso` を設定してアプリを起動します (環境変数の例)
+3. `PleasanterSso` を設定してアプリを起動します (環境変数の例。手順 5 のプリザンターの接続文字列も渡します)
 
 ```
 $env:PleasanterSso__Enabled = "true"
-$env:PleasanterSso__InternalBaseUrl = "http://localhost:59803/"
 $env:PleasanterSso__LoginUrl = "http://localhost:59803/users/login"
 $env:PleasanterSso__LogoutUrl = "http://localhost:59803/users/logout"
 dotnet run --project Source/Example/LowCodeApp.Server --launch-profile http
@@ -99,12 +124,12 @@ dotnet run --project Source/Example/LowCodeApp.Server --launch-profile http
 | 設定 | 内容 |
 |---|---|
 | `Enabled` | SSO を使うか (既定 `false` = ID / パスワードのログイン画面) |
-| `InternalBaseUrl` | CLB のサーバーからプリザンターへ問い合わせる URL (アプリのルート) |
+| `DataSourceName` | 本人を問い合わせるプリザンターのデータソースの名前。問い合わせ先はその接続文字列の `Url`。空なら最初のプリザンターのデータソース |
 | `LoginUrl` | ブラウザで開くプリザンターのログイン画面の URL |
 | `LogoutUrl` | ブラウザで開くプリザンターのログアウトの URL。空なら待ち画面に「プリザンターからもログアウトする」を出さない |
 | `AutoProvisionUser` | 登録の無い人の行を作るか (既定 `false`) |
 | `RevalidateSeconds` | CLB のセッションをプリザンターに確かめ直す間隔 (秒。既定 60) |
-| `TimeoutSeconds` | プリザンターへの問い合わせのタイムアウト (秒。既定 5) |
+| `TimeoutSeconds` | 本人の問い合わせのタイムアウト (秒。既定 5)。データの読み書きのタイムアウトは接続文字列の `TimeoutSeconds` |
 
 動き:
 
@@ -123,4 +148,14 @@ dotnet run --project Source/Example/LowCodeApp.Server --launch-profile http
 
 ## モジュール
 
-(第 2 段階で書く)
+| モジュール | 表 | 内容 |
+|---|---|---|
+| `Customer` (取引先) | `Customers` | 一覧・検索 (会社名・業種)・詳細。業種は Enum `業種` の SelectField。詳細にその取引先の案件の一覧 |
+| `Project` (案件) | `Projects` | 一覧 (受注日の降順・50 件ずつ)・検索 (案件名・取引先名・区分・状況・金額の範囲・受注日の範囲)・詳細。取引先は LinkField (選択のダイアログ)。状況はプリザンターでは数値の項目で、Enum `案件状況` (値が数字) の SelectField で名前を見せる。作成日時は表示だけ。詳細でその案件の作業を一覧で足す・直す・消す |
+| `WorkTask` (作業) | `Tasks` | 一覧 (10 件ずつ)・検索 (作業名・案件・担当者・開始の範囲)・詳細。期限付きテーブルの開始・完了・作業量・進捗率。残作業量はプリザンターが計算するので表示だけ |
+| `AmountByCustomer` (取引先別の案件金額) | — | 案件の金額を取引先 × 区分で合計するクロス集計 (CrossTabField とスクリプト)。プリザンターに集計の API は無いので、コネクターが案件を全部読んで集計します |
+| `AppUser` (ユーザー) | `app_users` (Main) | ログインするユーザー |
+| `Home` | — | ログイン後の最初の画面 |
+
+- 取引先・案件・作業は UpdatedTime の楽観ロック付きです (画面を開いたあとにプリザンターで更新されると、保存が止まります)
+- 状況・担当者などの選択肢は、メタ情報のファイルの選択肢を Enum に写したものです。プリザンターで選択肢を変えたときは、メタ情報を更新して Enum を直します

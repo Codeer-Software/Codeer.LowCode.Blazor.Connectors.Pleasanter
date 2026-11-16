@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using Codeer.LowCode.Blazor.Connectors.Pleasanter.Server;
 using Codeer.LowCode.Blazor.Extras.Server.Auth;
 using LowCodeApp.Server.Infrastructure;
 using Microsoft.AspNetCore.Authentication;
@@ -6,26 +7,6 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 
 namespace LowCodeApp.Server.Sso
 {
-    public enum PleasanterSsoStatus
-    {
-        /// <summary>プリザンターでログイン済み。Identity がある。</summary>
-        Authenticated,
-        /// <summary>プリザンターでログインしていない (Cookie が無い・期限切れ・ログアウト済み)。</summary>
-        Unauthenticated,
-        /// <summary>プリザンターに届かない・応答が読めない。ログイン済みとは扱わない。</summary>
-        Failed,
-    }
-
-    /// <summary>プリザンターが解決した本人 (ブラウザから受け取った値ではない)。</summary>
-    public sealed record PleasanterSsoIdentity(int TenantId, int UserId, string LoginId, string Name);
-
-    public sealed record PleasanterSsoResult(PleasanterSsoStatus Status, PleasanterSsoIdentity? Identity, string? Message = null)
-    {
-        public static readonly PleasanterSsoResult Unauthenticated = new(PleasanterSsoStatus.Unauthenticated, null);
-        public static PleasanterSsoResult Authenticated(PleasanterSsoIdentity identity) => new(PleasanterSsoStatus.Authenticated, identity);
-        public static PleasanterSsoResult Failed(string message) => new(PleasanterSsoStatus.Failed, null, message);
-    }
-
     public enum PleasanterSsoRevalidation
     {
         /// <summary>SSO のセッションでない・確かめ直す時期でない・確かめ直して有効だった。</summary>
@@ -53,21 +34,33 @@ namespace LowCodeApp.Server.Sso
 
         public static bool IsEnabled => Settings.IsEnabled;
 
-        /// <summary>リクエストが持つプリザンターの Cookie で本人を確かめる。</summary>
-        public static async Task<PleasanterSsoResult> VerifyAsync(HttpContext ctx)
+        /// <summary>
+        /// リクエストが持つプリザンターの Cookie で本人を確かめる。問い合わせ先はプリザンターのデータソースの接続文字列の Url
+        /// (DataService と同じ接続。データソースは PleasanterSso.DataSourceName、空なら最初のプリザンターのデータソース)。
+        /// 確かめられない (Failed) ときはログに残す。null はプリザンターのデータソースが無い (確かめられないのと同じに扱う)。
+        /// </summary>
+        public static async Task<PleasanterSessionResult?> VerifyAsync(HttpContext ctx)
         {
-            if (!IsEnabled) return PleasanterSsoResult.Unauthenticated;
-            var result = await PleasanterSessionVerifier.VerifyAsync(Settings, ctx.Request.Cookies, ctx.RequestAborted);
-            if (result.Status == PleasanterSsoStatus.Failed)
+            if (!IsEnabled) return null;
+            var connection = PleasanterConnection.FromDataSources(SystemConfig.Instance.DataSources)
+                .FirstOrDefault(e => string.IsNullOrEmpty(Settings.DataSourceName) || e.Settings.Name == Settings.DataSourceName);
+            var logger = ctx.RequestServices.GetRequiredService<ILoggerFactory>().CreateLogger(typeof(PleasanterSso).FullName!);
+            if (connection == null)
             {
-                ctx.RequestServices.GetRequiredService<ILoggerFactory>().CreateLogger(typeof(PleasanterSso).FullName!)
-                    .LogWarning("Pleasanter SSO: the session could not be verified ({Message}).", result.Message);
+                logger.LogWarning("Pleasanter SSO: there is no Pleasanter data source to verify the session.");
+                return null;
             }
+
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ctx.RequestAborted);
+            timeout.CancelAfter(TimeSpan.FromSeconds(Math.Max(1, Settings.TimeoutSeconds)));
+            var result = await connection.VerifySessionAsync(ctx.Request.Cookies, cancellationToken: timeout.Token);
+            if (result.Status == PleasanterSessionStatus.Failed)
+                logger.LogWarning("Pleasanter SSO: the session could not be verified ({Message}).", result.Message);
             return result;
         }
 
         /// <summary>CLB の認証 Cookie を発行する。ブラウザを閉じると消える Cookie (プリザンターのセッションより長く残さない)。</summary>
-        public static Task SignInAsync(HttpContext ctx, LoginAccount account, PleasanterSsoIdentity identity)
+        public static Task SignInAsync(HttpContext ctx, LoginAccount account, PleasanterIdentity identity)
             => SignInAsync(ctx, account.UserId, string.IsNullOrEmpty(account.DisplayName) ? identity.Name : account.DisplayName, account.SessionStamp, identity);
 
         public static bool IsSsoPrincipal(ClaimsPrincipal? user)
@@ -84,16 +77,16 @@ namespace LowCodeApp.Server.Sso
             if (VerifiedAtAgeSeconds(user) <= Settings.RevalidateSeconds) return PleasanterSsoRevalidation.Valid;
 
             var result = await VerifyAsync(ctx);
-            if (result.Status == PleasanterSsoStatus.Authenticated && result.Identity != null && Matches(result.Identity, user))
+            if (result?.Identity != null && Matches(result.Identity, user))
             {
                 await SignInAsync(ctx, LoginPrincipal.GetUserId(user), LoginPrincipal.GetDisplayName(user), LoginPrincipal.GetSessionStamp(user), result.Identity);
                 return PleasanterSsoRevalidation.Valid;
             }
             await ctx.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
-            return result.Status == PleasanterSsoStatus.Failed ? PleasanterSsoRevalidation.Failed : PleasanterSsoRevalidation.Unauthenticated;
+            return result == null || result.Status == PleasanterSessionStatus.Failed ? PleasanterSsoRevalidation.Failed : PleasanterSsoRevalidation.Unauthenticated;
         }
 
-        static Task SignInAsync(HttpContext ctx, string userId, string displayName, string? sessionStamp, PleasanterSsoIdentity identity)
+        static Task SignInAsync(HttpContext ctx, string userId, string displayName, string? sessionStamp, PleasanterIdentity identity)
         {
             var principal = LoginPrincipal.Create(userId, displayName, Provider, sessionStamp);
             var claims = (ClaimsIdentity)principal.Identity!;
@@ -106,7 +99,7 @@ namespace LowCodeApp.Server.Sso
         static long VerifiedAtAgeSeconds(ClaimsPrincipal user)
             => long.TryParse(user.FindFirst(ClaimVerifiedAt)?.Value, out var at) ? DateTimeOffset.UtcNow.ToUnixTimeSeconds() - at : long.MaxValue;
 
-        static bool Matches(PleasanterSsoIdentity identity, ClaimsPrincipal user)
+        static bool Matches(PleasanterIdentity identity, ClaimsPrincipal user)
             => user.FindFirst(ClaimUser)?.Value == identity.UserId.ToString()
             && user.FindFirst(ClaimTenant)?.Value == identity.TenantId.ToString();
     }

@@ -1,0 +1,403 @@
+{
+  "Tables": [
+    {
+      "Name": "Customers",
+      "SiteId": 215,
+      "ReferenceType": "Results",
+      "Key": "ResultId",
+      "TitleIsRaw": true,
+      "Columns": [
+        {
+          "Name": "ResultId",
+          "Kind": "Number",
+          "ReadOnly": true,
+          "Nullable": false
+        },
+        {
+          "Name": "Title",
+          "Kind": "String",
+          "ReadOnly": false,
+          "Nullable": true,
+          "LabelText": "会社名"
+        },
+        {
+          "Name": "Body",
+          "Kind": "String",
+          "ReadOnly": false,
+          "Nullable": true
+        },
+        {
+          "Name": "Status",
+          "Kind": "Number",
+          "ReadOnly": false,
+          "Nullable": false
+        },
+        {
+          "Name": "Manager",
+          "Kind": "Number",
+          "ReadOnly": false,
+          "Nullable": false
+        },
+        {
+          "Name": "Owner",
+          "Kind": "Number",
+          "ReadOnly": false,
+          "Nullable": false
+        },
+        {
+          "Name": "Ver",
+          "Kind": "Number",
+          "ReadOnly": true,
+          "Nullable": false
+        },
+        {
+          "Name": "Creator",
+          "Kind": "Number",
+          "ReadOnly": true,
+          "Nullable": false
+        },
+        {
+          "Name": "Updator",
+          "Kind": "Number",
+          "ReadOnly": true,
+          "Nullable": false
+        },
+        {
+          "Name": "CreatedTime",
+          "Kind": "DateTime",
+          "ReadOnly": true,
+          "Nullable": true
+        },
+        {
+          "Name": "UpdatedTime",
+          "Kind": "DateTime",
+          "ReadOnly": true,
+          "Nullable": true
+        },
+        {
+          "Name": "ClassA",
+          "Kind": "String",
+          "ReadOnly": false,
+          "Nullable": true,
+          "LabelText": "業種",
+          "Choices": [
+            {
+              "Value": "製造"
+            },
+            {
+              "Value": "物流"
+            },
+            {
+              "Value": "食品"
+            },
+            {
+              "Value": "建設"
+            },
+            {
+              "Value": "情報通信"
+            }
+          ]
+        },
+        {
+          "Name": "ClassB",
+          "Kind": "String",
+          "ReadOnly": false,
+          "Nullable": true,
+          "LabelText": "電話番号"
+        },
+        {
+          "Name": "DescriptionA",
+          "Kind": "String",
+          "ReadOnly": false,
+          "Nullable": true,
+          "LabelText": "備考"
+        }
+      ]
+    },
+    {
+      "Name": "Projects",
+      "SiteId": 216,
+      "ReferenceType": "Results",
+      "Key": "ResultId",
+      "TitleIsRaw": true,
+      "Columns": [
+        {
+          "Name": "ResultId",
+          "Kind": "Number",
+          "ReadOnly": true,
+          "Nullable": false
+        },
+        {
+          "Name": "Title",
+          "Kind": "String",
+          "ReadOnly": false,
+          "Nullable": true,
+          "LabelText": "案件名"
+        },
+        {
+          "Name": "Body",
+          "Kind": "String",
+          "ReadOnly": false,
+          "Nullable": true
+        },
+        {
+          "Name": "Status",
+          "Kind": "Number",
+          "ReadOnly": false,
+          "Nullable": false,
+          "Choices": [
+            {
+              "Value": "100",
+              "DisplayText": "見込み"
+            },
+            {
+              "Value": "200",
+              "DisplayText": "提案中"
+            },
+            {
+              "Value": "300",
+              "DisplayText": "受注"
+            },
+            {
+              "Value": "900",
+              "DisplayText": "失注"
+            }
+          ]
+        },
+        {
+          "Name": "Manager",
+          "Kind": "Number",
+          "ReadOnly": false,
+          "Nullable": false
+        },
+        {
+          "Name": "Owner",
+          "Kind": "Number",
+          "ReadOnly": false,
+          "Nullable": false
+        },
+        {
+          "Name": "Ver",
+          "Kind": "Number",
+          "ReadOnly": true,
+          "Nullable": false
+        },
+        {
+          "Name": "Creator",
+          "Kind": "Number",
+          "ReadOnly": true,
+          "Nullable": false
+        },
+        {
+          "Name": "Updator",
+          "Kind": "Number",
+          "ReadOnly": true,
+          "Nullable": false
+        },
+        {
+          "Name": "CreatedTime",
+          "Kind": "DateTime",
+          "ReadOnly": true,
+          "Nullable": true
+        },
+        {
+          "Name": "UpdatedTime",
+          "Kind": "DateTime",
+          "ReadOnly": true,
+          "Nullable": true
+        },
+        {
+          "Name": "ClassA",
+          "Kind": "String",
+          "ReadOnly": false,
+          "Nullable": true,
+          "LabelText": "取引先",
+          "LinkSiteId": 215,
+          "LinkTable": "Customers"
+        },
+        {
+          "Name": "ClassB",
+          "Kind": "String",
+          "ReadOnly": false,
+          "Nullable": true,
+          "LabelText": "区分",
+          "Choices": [
+            {
+              "Value": "新規"
+            },
+            {
+              "Value": "追加"
+            },
+            {
+              "Value": "保守"
+            }
+          ]
+        },
+        {
+          "Name": "NumA",
+          "Kind": "Number",
+          "ReadOnly": false,
+          "Nullable": false,
+          "LabelText": "金額"
+        },
+        {
+          "Name": "DateA",
+          "Kind": "Date",
+          "ReadOnly": false,
+          "Nullable": true,
+          "LabelText": "受注日"
+        },
+        {
+          "Name": "CheckA",
+          "Kind": "Bool",
+          "ReadOnly": false,
+          "Nullable": true,
+          "LabelText": "確認済"
+        },
+        {
+          "Name": "DescriptionA",
+          "Kind": "String",
+          "ReadOnly": false,
+          "Nullable": true,
+          "LabelText": "メモ"
+        }
+      ]
+    },
+    {
+      "Name": "Tasks",
+      "SiteId": 217,
+      "ReferenceType": "Issues",
+      "Key": "IssueId",
+      "TitleIsRaw": true,
+      "Columns": [
+        {
+          "Name": "IssueId",
+          "Kind": "Number",
+          "ReadOnly": true,
+          "Nullable": false
+        },
+        {
+          "Name": "Title",
+          "Kind": "String",
+          "ReadOnly": false,
+          "Nullable": true,
+          "LabelText": "作業名"
+        },
+        {
+          "Name": "Body",
+          "Kind": "String",
+          "ReadOnly": false,
+          "Nullable": true
+        },
+        {
+          "Name": "StartTime",
+          "Kind": "DateTime",
+          "ReadOnly": false,
+          "Nullable": true
+        },
+        {
+          "Name": "CompletionTime",
+          "Kind": "DateTime",
+          "ReadOnly": false,
+          "Nullable": true
+        },
+        {
+          "Name": "WorkValue",
+          "Kind": "Number",
+          "ReadOnly": false,
+          "Nullable": false
+        },
+        {
+          "Name": "ProgressRate",
+          "Kind": "Number",
+          "ReadOnly": false,
+          "Nullable": false
+        },
+        {
+          "Name": "RemainingWorkValue",
+          "Kind": "Number",
+          "ReadOnly": true,
+          "Nullable": false
+        },
+        {
+          "Name": "Status",
+          "Kind": "Number",
+          "ReadOnly": false,
+          "Nullable": false
+        },
+        {
+          "Name": "Manager",
+          "Kind": "Number",
+          "ReadOnly": false,
+          "Nullable": false
+        },
+        {
+          "Name": "Owner",
+          "Kind": "Number",
+          "ReadOnly": false,
+          "Nullable": false
+        },
+        {
+          "Name": "Ver",
+          "Kind": "Number",
+          "ReadOnly": true,
+          "Nullable": false
+        },
+        {
+          "Name": "Creator",
+          "Kind": "Number",
+          "ReadOnly": true,
+          "Nullable": false
+        },
+        {
+          "Name": "Updator",
+          "Kind": "Number",
+          "ReadOnly": true,
+          "Nullable": false
+        },
+        {
+          "Name": "CreatedTime",
+          "Kind": "DateTime",
+          "ReadOnly": true,
+          "Nullable": true
+        },
+        {
+          "Name": "UpdatedTime",
+          "Kind": "DateTime",
+          "ReadOnly": true,
+          "Nullable": true
+        },
+        {
+          "Name": "ClassA",
+          "Kind": "String",
+          "ReadOnly": false,
+          "Nullable": true,
+          "LabelText": "案件",
+          "LinkSiteId": 216,
+          "LinkTable": "Projects"
+        },
+        {
+          "Name": "ClassB",
+          "Kind": "String",
+          "ReadOnly": false,
+          "Nullable": true,
+          "LabelText": "担当者",
+          "Choices": [
+            {
+              "Value": "佐藤"
+            },
+            {
+              "Value": "鈴木"
+            },
+            {
+              "Value": "高橋"
+            },
+            {
+              "Value": "田中"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

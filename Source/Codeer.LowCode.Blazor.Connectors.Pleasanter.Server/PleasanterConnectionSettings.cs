@@ -14,7 +14,7 @@ namespace Codeer.LowCode.Blazor.Connectors.Pleasanter.Server
         /// <summary>ConnectionString の Provider の値。これがあるデータソースをプリザンターとして扱う。</summary>
         public const string ProviderName = "Pleasanter";
 
-        /// <summary>空の日付の既定 (プリザンターの General.json の MinTime の既定)。</summary>
+        /// <summary>空の日付の既定 (プリザンターが空の日付として返す 1899-12-30)。</summary>
         public static readonly DateTime DefaultEmptyDate = new(1899, 12, 30);
 
         static readonly Regex AliasPattern = new("^[A-Za-z0-9_]+$", RegexOptions.CultureInvariant);
@@ -37,7 +37,7 @@ namespace Codeer.LowCode.Blazor.Connectors.Pleasanter.Server
         /// <summary>1 回の要求のタイムアウト (秒)。</summary>
         public int TimeoutSeconds { get; set; } = 100;
 
-        /// <summary>プリザンターの「空の日付」の値 (General.json の MinTime)。読むときはこの値を null に、空にするときはこの値を書く。</summary>
+        /// <summary>プリザンターの「空の日付」の値 (API が空の日付として返す値。General.json の MinTime ではない)。読むときはこの値を null に、空にするときはこの値を書く。</summary>
         public DateTime EmptyDate { get; set; } = DefaultEmptyDate;
 
         /// <summary>

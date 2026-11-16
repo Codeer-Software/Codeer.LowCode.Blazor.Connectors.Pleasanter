@@ -1,0 +1,22 @@
+{
+  "Name": "案件状況",
+  "ValueType": "Number",
+  "Members": [
+    {
+      "Name": "見込み",
+      "Value": "100"
+    },
+    {
+      "Name": "提案中",
+      "Value": "200"
+    },
+    {
+      "Name": "受注",
+      "Value": "300"
+    },
+    {
+      "Name": "失注",
+      "Value": "900"
+    }
+  ]
+}

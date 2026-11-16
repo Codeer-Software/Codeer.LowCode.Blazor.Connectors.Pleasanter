@@ -373,6 +373,10 @@ namespace Codeer.LowCode.Blazor.Connectors.Pleasanter.Server
                 using (response)
                 {
                     var status = (int)response.StatusCode;
+                    //プリザンターは処理の途中の例外もエラー画面へのリダイレクトで返すので、書き込みでは「処理されていない」と言い切れない
+                    if (300 <= status && status < 400 && !isRead)
+                        throw new PleasanterException($"Pleasanter: the server returned a redirect (HTTP {status}) to a write request. Whether it was processed is unknown. Check the record in Pleasanter before retrying.",
+                            PleasanterErrorKind.WriteResultUnknown, response.StatusCode, null);
                     if (300 <= status && status < 400)
                         throw new PleasanterException($"Pleasanter: the server returned a redirect (HTTP {status}). Redirects are not followed and the request was not processed. Check that Url is the root URL of Pleasanter.",
                             PleasanterErrorKind.InvalidRequest, response.StatusCode, null);

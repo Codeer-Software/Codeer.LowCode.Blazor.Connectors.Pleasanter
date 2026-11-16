@@ -1,0 +1,91 @@
+{
+  "IsApplicationRoot": true,
+  "Name": "Main",
+  "Left": {
+    "IsVisible": true,
+    "Home": {
+      "Type": "Text",
+      "Text": "Home"
+    },
+    "Links": [
+      {
+        "Title": "取引先",
+        "Module": "Customer"
+      },
+      {
+        "Title": "案件",
+        "Module": "Project",
+        "ListPageDesign": {
+          "ListFieldDesign": {
+            "CanNavigateToDetail": true,
+            "SearchCondition": {
+              "LimitCount": 50,
+              "SortConditions": [
+                {
+                  "Variable": "OrderDate.Value",
+                  "IsDescending": true
+                }
+              ]
+            },
+            "PagerPosition": "Bottom",
+            "CanDelete": true,
+            "Name": "",
+            "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
+          }
+        }
+      },
+      {
+        "Title": "作業",
+        "Module": "WorkTask",
+        "ListPageDesign": {
+          "ListFieldDesign": {
+            "CanNavigateToDetail": true,
+            "SearchCondition": {
+              "LimitCount": 10
+            },
+            "PagerPosition": "Bottom",
+            "CanDelete": true,
+            "Name": "",
+            "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
+          }
+        }
+      },
+      {
+        "Title": "取引先別の案件金額",
+        "Module": "AmountByCustomer",
+        "ModulePageType": "Detail"
+      },
+      {
+        "Title": "ユーザー",
+        "Module": "AppUser"
+      }
+    ],
+    "Foreground": "#ffffff",
+    "BackgroundStart": "#052767",
+    "BackgroundEnd": "#3a0647"
+  },
+  "Right": {
+    "Foreground": "#ffffff",
+    "BackgroundStart": "#052767",
+    "BackgroundEnd": "#3a0647"
+  },
+  "Header": {
+    "Foreground": "#000000",
+    "Background": "#f8f9fa"
+  },
+  "TopPageModuleDesign": {
+    "Module": "Home",
+    "ListPageDesign": {
+      "ListFieldDesign": {
+        "SearchCondition": {
+          "LimitCount": 50
+        },
+        "PagerPosition": "Bottom",
+        "CanDelete": true,
+        "Name": "",
+        "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
+      }
+    }
+  },
+  "TopPageModule": "Home"
+}

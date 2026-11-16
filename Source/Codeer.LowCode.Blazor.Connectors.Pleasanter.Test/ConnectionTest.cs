@@ -135,6 +135,20 @@ namespace Codeer.LowCode.Blazor.Connectors.Pleasanter.Test
             Assert.That(_h.Fake.Requests, Has.Count.EqualTo(1));
         }
 
+        [Test]
+        public void 書き込みのリダイレクトは結果不明()
+        {
+            _h.Fake.Override(_ => true, _ =>
+            {
+                var response = Text(HttpStatusCode.Found, string.Empty);
+                response.Headers.Location = new Uri("/errors", UriKind.Relative);
+                return response;
+            }, 10);
+            var e = Assert.ThrowsAsync<PleasanterException>(WriteAsync)!;
+            Assert.That(e.Kind, Is.EqualTo(PleasanterErrorKind.WriteResultUnknown));
+            Assert.That(_h.Fake.Requests, Has.Count.EqualTo(1));
+        }
+
         [TestCase(HttpStatusCode.ServiceUnavailable)]
         [TestCase(HttpStatusCode.InternalServerError)]
         [TestCase(HttpStatusCode.GatewayTimeout)]

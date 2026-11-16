@@ -1,0 +1,16 @@
+{
+  "DataSources": [
+    {
+      "Name": "Main",
+      "DataSourceType": "SQLite",
+      "AllowCliSqlAccess": true
+    },
+    {
+      "Name": "Pleasanter",
+      "DataSourceType": "PostgreSQL"
+    }
+  ],
+  "FileStorageNames": [
+    "Local"
+  ]
+}

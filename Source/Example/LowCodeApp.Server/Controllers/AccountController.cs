@@ -11,6 +11,7 @@ using Codeer.LowCode.Blazor.Extras.Server.Auth;
 using Codeer.LowCode.Blazor.Extras.Server.Mail;
 using Microsoft.Extensions.Caching.Distributed;
 using LowCodeApp.Server.Sso;
+using Codeer.LowCode.Blazor.Connectors.Pleasanter.Server;
 
 namespace LowCodeApp.Server.Controllers
 {
@@ -69,43 +70,50 @@ namespace LowCodeApp.Server.Controllers
         {
             if (!PleasanterSso.IsEnabled) return NotFound();
             var safe = LocalReturnUrl(returnUrl);
-            if (await TrySsoSignInAsync()) return Redirect(safe);
+            if (await TrySsoSignInAsync() == SsoSignInResult.SignedIn) return Redirect(safe);
             return Redirect($"/sso-login.html?returnUrl={Uri.EscapeDataString(safe)}");
         }
 
         //ログイン待ち画面 (sso-login.html) と index.html が呼ぶ。プリザンターでログイン済みなら CLB の Cookie を発行して Authenticated = true を返す
-        //(プリザンターのログイン画面は別のオリジンへ戻れないので、CLB の側で待つ)
-        [HttpGet("sso/check"), Audit(AuditCategory.Authentication)]
+        //(プリザンターのログイン画面は別のオリジンへ戻れないので、CLB の側で待つ)。
+        //プリザンターでは確かめられたがユーザーモジュールに登録が無いときは NotRegistered = true (待ち画面は確かめるのをやめて知らせる)
+        //待ち画面が繰り返し呼ぶので監査ログの分類は付けない (まだログインしていない結果は記録されない)。
+        //プリザンターで本人が確かめられたときだけ TrySsoSignInAsync が認証の分類にする (ログインの成否が記録される)
+        [HttpGet("sso/check")]
         public async Task<IActionResult> SsoCheck()
         {
             if (!PleasanterSso.IsEnabled) return NotFound();
-            return Ok(new { Authenticated = await TrySsoSignInAsync() });
+            var result = await TrySsoSignInAsync();
+            return Ok(new { Authenticated = result == SsoSignInResult.SignedIn, NotRegistered = result == SsoSignInResult.NotRegistered });
         }
+
+        enum SsoSignInResult { NotSignedIn, SignedIn, NotRegistered }
 
         //届いたプリザンターの Cookie で本人を確かめ、ユーザーモジュールの行に結び付けて Cookie を発行する。
         //TenantId / UserId などはブラウザから受け取らない (プリザンターが解決した値だけを使う)
-        async Task<bool> TrySsoSignInAsync()
+        async Task<SsoSignInResult> TrySsoSignInAsync()
         {
             var result = await PleasanterSso.VerifyAsync(HttpContext);
-            if (result.Status != PleasanterSsoStatus.Authenticated || result.Identity == null) return false;
+            if (result?.Identity == null) return SsoSignInResult.NotSignedIn;
             var identity = result.Identity;
+            await _audit.StartAsync(AuditCategory.Authentication, _audit.Event.Action);
             _audit.Event.Detail = $"Provider={PleasanterSso.Provider}; LoginId={identity.LoginId}";
 
             var account = await FindSsoAccountAsync(identity);
             if (account == null)
             {
                 _audit.Deny($"Provider={PleasanterSso.Provider}; LoginId={identity.LoginId}; user_not_registered");
-                return false;
+                return SsoSignInResult.NotRegistered;
             }
             _audit.Event.UserId = account.UserId;
             await PleasanterSso.SignInAsync(HttpContext, account, identity);
-            return true;
+            return SsoSignInResult.SignedIn;
         }
 
         //プリザンターのログイン ID を、ユーザーモジュールの外部ログイン名の列 (LoginAccountContractField の ExternalLoginName。空ならログイン名の列) で引く。
         //無くて AutoProvisionUser なら、ログイン ID をログイン名にして行を作る (パスワードは誰も知らない値。ID / パスワードのログインには使えない)。
         //同じログイン名の行が既にあれば作らない (別の人の行に入らないように)
-        async Task<LoginAccount?> FindSsoAccountAsync(PleasanterSsoIdentity identity)
+        async Task<LoginAccount?> FindSsoAccountAsync(PleasanterIdentity identity)
         {
             var accounts = LoginAccountStore.Create(_dataService.Design.DesignData, _dataService.DbAccess);
             if (accounts == null) return null;

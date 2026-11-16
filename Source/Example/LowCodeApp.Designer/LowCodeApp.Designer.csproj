@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+
+	<!-- プリザンター コネクターを組み込んだデザイナの見本 (パッケージにしない)。結線は App.xaml.cs と DbAccessorFactory.cs -->
+	<PropertyGroup>
+		<OutputType>WinExe</OutputType>
+		<TargetFramework>net8.0-windows</TargetFramework>
+		<Nullable>enable</Nullable>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<UseWPF>true</UseWPF>
+		<IsPackable>false</IsPackable>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<PackageReference Include="Codeer.LowCode.Blazor.Designer" Version="1.3.69" />
+		<PackageReference Include="Codeer.LowCode.Blazor.DbAccess" Version="0.2.5" />
+		<!-- Example/Design のユーザーモジュール (AppUser) が Extras のフィールドを使う -->
+		<PackageReference Include="Codeer.LowCode.Blazor.Extras.Designer" Version="0.32.0" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<!-- 利用者のアプリでは PackageReference Codeer.LowCode.Blazor.Connectors.Pleasanter.Designer -->
+		<ProjectReference Include="..\..\Codeer.LowCode.Blazor.Connectors.Pleasanter.Designer\Codeer.LowCode.Blazor.Connectors.Pleasanter.Designer.csproj" />
+	</ItemGroup>
+
+</Project>

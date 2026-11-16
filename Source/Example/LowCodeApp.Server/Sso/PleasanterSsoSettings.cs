@@ -9,8 +9,11 @@ namespace LowCodeApp.Server.Sso
         /// <summary>使うか。false ならテンプレートどおりの ID / パスワードのログイン画面。</summary>
         public bool Enabled { get; set; }
 
-        /// <summary>CLB のサーバーからプリザンターへ問い合わせる URL (アプリのルート。例: http://localhost:59803/)。ブラウザからは指定させない。</summary>
-        public string InternalBaseUrl { get; set; } = string.Empty;
+        /// <summary>
+        /// 本人を問い合わせるプリザンターのデータソースの名前 (DataSources の Name)。問い合わせ先はその接続文字列の Url。
+        /// 空なら最初のプリザンターのデータソース (プリザンターのデータソースが 1 つなら空でよい)。
+        /// </summary>
+        public string DataSourceName { get; set; } = string.Empty;
 
         /// <summary>ブラウザで開くプリザンターのログイン画面の URL (例: https://pleasanter.example.com/users/login)。ログイン待ち画面 (sso-login.html) が開く。</summary>
         public string LoginUrl { get; set; } = string.Empty;
@@ -30,6 +33,6 @@ namespace LowCodeApp.Server.Sso
         /// <summary>プリザンターへの問い合わせのタイムアウト (秒)。</summary>
         public int TimeoutSeconds { get; set; } = 5;
 
-        public bool IsEnabled => Enabled && !string.IsNullOrEmpty(InternalBaseUrl);
+        public bool IsEnabled => Enabled;
     }
 }

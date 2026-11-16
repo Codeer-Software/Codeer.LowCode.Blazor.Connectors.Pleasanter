@@ -58,7 +58,7 @@ python sso_e2e.py
 | ケース | 期待 |
 |---|---|
 | `unauth_extended_sql_401` | 未認証で `/api/extended/sql` → 401 |
-| `clb_no_cookie_401` | Cookie 無しで CLB `current_user` → 401 |
+| `clb_no_cookie_anonymous` | Cookie 無しで CLB `current_user` → 未ログイン (空の Id) |
 | `pre_totp_rejected` | パスワードのみ (TOTP 未完了) → 拒否・CLB Cookie 無し |
 | `full_login_enters_clb` | パスワード+TOTP 完了 → CLB に整数 Id で入場 |
 | `logout_clears_clb` | ログアウトで CLB Cookie が消える (待ち画面へ) |
