@@ -1,0 +1,38 @@
+using Microsoft.AspNetCore.Components;
+using Microsoft.AspNetCore.Components.Web;
+using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
+using LowCodeApp.Client;
+using Microsoft.JSInterop;
+using Codeer.LowCode.Blazor.RequestInterfaces;
+using LowCodeApp.Client.Shared.Services;
+
+var builder = WebAssemblyHostBuilder.CreateDefault(args);
+builder.RootComponents.Add<App>("#app");
+builder.RootComponents.Add<HeadOutlet>("head::after");
+
+builder.Services.AddSharedServices();
+builder.Services.AddScoped<INavigationService, NavigationService>();
+
+builder.Services.AddScoped(sp => {
+    //API が 401 を返したら (Cookie の期限切れ・失効) ログイン画面へ抜ける
+    var httpClient = new HttpClient(new UnauthorizedToLoginHandler(sp.GetRequiredService<NavigationManager>()) { InnerHandler = new HttpClientHandler() })
+    {
+        BaseAddress = new Uri(builder.HostEnvironment.BaseAddress),
+        //大きな添付 (動画など) のアップロードが既定の 100 秒で切れないようにする
+        Timeout = TimeSpan.FromMinutes(30)
+    };
+    var jsRuntime = (IJSInProcessRuntime)sp.GetService<IJSRuntime>()!;
+    var cookie = jsRuntime.Invoke<string>("window.jsFunctions.getCookie");
+    var token = cookie.Split(";").Select(e => e.Trim().Split("=")).Where(e => e.Length == 2 && e[0] == "X-ANTIFORGERY-TOKEN").Select(e => e[1]).FirstOrDefault();
+    httpClient.DefaultRequestHeaders.Add("X-ANTIFORGERY-TOKEN", token);
+
+    return httpClient;
+});
+
+//antiforgery トークンの Cookie を先に取っておく (GET /api/account/antiforgery)
+using (var boot = new HttpClient { BaseAddress = new Uri(builder.HostEnvironment.BaseAddress) })
+{
+    try { await boot.GetAsync("api/account/antiforgery"); } catch { }
+}
+
+await builder.Build().RunAsync();

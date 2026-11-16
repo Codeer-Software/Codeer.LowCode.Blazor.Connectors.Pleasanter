@@ -1,0 +1,165 @@
+using LowCodeApp.Server.Extras;
+using Codeer.LowCode.Blazor.DataIO;
+using Codeer.LowCode.Blazor.Repository.Data;
+using Codeer.LowCode.Blazor.Repository.Match;
+using Codeer.LowCode.Blazor.RequestInterfaces;
+using Codeer.LowCode.Blazor.Utils;
+using MessagePack;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http.Features;
+using Microsoft.AspNetCore.Mvc;
+using LowCodeApp.Client.Shared.Services;
+using LowCodeApp.Server.Infrastructure;
+using Codeer.LowCode.Blazor.Extras.Server.AuditLog;
+using Codeer.LowCode.Blazor.Extras.Server.BulkFile;
+using Codeer.LowCode.Blazor.Extras.Server.FileManagement;
+using Codeer.LowCode.Blazor.Extras.Server.Web;
+
+namespace LowCodeApp.Server.Controllers
+{
+    [Authorize, AutoValidateAntiforgeryToken]
+    [ApiController]
+    [Route("api/module_data")]
+    public class ModuleDataController : ControllerBase, IAsyncDisposable
+    {
+        readonly DataService _dataService;
+        readonly AuditContext _audit;
+
+        public ModuleDataController(DataService dataService, AuditContext audit)
+        {
+            _dataService = dataService;
+            _audit = audit;
+        }
+
+        public async ValueTask DisposeAsync()
+            => await _dataService.DisposeAsync();
+
+        [HttpGet("config")]
+        public SystemConfigForFront GetSystemConfig()
+            => SystemConfig.Instance.ForFront();
+
+        [HttpGet("design")]
+        public async Task<IActionResult> GetDesignData()
+        {
+            await _dataService.ModuleDataIO.AuthorizationChecker.CheckAppAccessAsync();
+            return this.FileWithETag(_dataService.Design.ForFront(await _dataService.ModuleDataIO.AuthorizationChecker.GetCurrentUserAsync()), "application/octet-stream");
+        }
+
+        //監査ログに読んだ行の Id まで残すなら AddRead の recordIds を true にする
+        [HttpPost("list"), Audit(AuditCategory.DataRead)]
+        public async Task<IActionResult> GetListAsync(List<GetListRequest> request)
+        {
+            var ret = new List<Paging<ModuleData>>();
+            foreach (var e in request)
+            {
+                var page = await _dataService.ModuleDataIO.GetListAsync(e.Condition, e.PageIndex);
+                _audit.AddRead(e.Condition.ModuleName, page, recordIds: false);
+                ret.Add(page);
+            }
+            return File(new MemoryStream(MessagePackSerializer.Typeless.Serialize(ret)), "application/octet-stream");
+        }
+
+        [HttpPost, Audit(AuditCategory.DataWrite)]
+        public async Task<List<ModuleSubmitResult>> SubmitAsync(List<ModuleSubmitData> data)
+            => (await _dataService.ModuleDataIO.SubmitWithTransactionAsync(data)).ToClientMessage(HttpContext);
+
+        [HttpPost("aggregate"), Audit(AuditCategory.DataRead)]
+        public async Task<IActionResult> AggregateAsync(List<AggregateCondition> conditions)
+        {
+            var results = await _dataService.ModuleDataIO.AggregateAsync(conditions);
+            foreach (var moduleName in conditions.Select(e => e.ModuleName).Distinct())
+            {
+                _audit.AddTarget(moduleName, null, "Aggregate");
+            }
+            _audit.AddNote("Rows", (results.FirstOrDefault()?.TotalCount ?? 0).ToString());
+            return File(new MemoryStream(MessagePackSerializer.Typeless.Serialize(results)), "application/octet-stream");
+        }
+
+        [HttpPost("list_file"), Audit(AuditCategory.Export)]
+        public async Task<IActionResult> GetListFileAsync(SearchCondition? condition)
+        {
+            _audit.AddTarget(condition?.ModuleName ?? string.Empty, null, "Export");
+            return Ok(await BulkFileTransfer.GetListFileAsync(_dataService.Design.DesignData, _dataService.ModuleDataIO, condition!));
+        }
+
+        [HttpPost("submit_by_file"), Audit(AuditCategory.DataWrite)]
+        public async Task<List<ModuleSubmitResult>> SubmitByFileAsync(string? moduleName)
+        {
+            _audit.AddTarget(moduleName ?? string.Empty, null, "Import");
+            var results = await BulkFileTransfer.SubmitByFileAsync(_dataService.Design.DesignData, _dataService.ModuleDataIO, moduleName, Request);
+            var error = results.FirstOrDefault(e => !string.IsNullOrEmpty(e.ExceptionMessage))?.ExceptionMessage;
+            if (error != null) _audit.Fail(error);
+            return results.ToClientMessage(HttpContext);
+        }
+
+        //スクリプトの一括ファイル出力 (BulkFileTransferService.Download) 用
+        [HttpPost("list_file_by_data"), Audit(AuditCategory.Export)]
+        public async Task<IActionResult> GetListFileByDataAsync(string? moduleName)
+        {
+            _audit.AddTarget(moduleName ?? string.Empty, null, "Export");
+            return Ok(await BulkFileTransfer.GetListFileByDataAsync(_dataService.Design.DesignData, _dataService.ModuleDataIO, moduleName, Request.Body));
+        }
+
+        //スクリプトの一括保存 (BulkFileTransferService.Submit) 用
+        [HttpPost("bulk_submit"), Audit(AuditCategory.DataWrite)]
+        public async Task<List<ModuleSubmitResult>> BulkSubmitAsync(string? moduleName)
+            => (await BulkFileTransfer.SubmitByDataAsync(_dataService.ModuleDataIO, moduleName, Request.Body)).ToClientMessage(HttpContext);
+
+        //スクリプトの一括ファイル取込 (BulkFileReader) 用。DB には書き込まない
+        [HttpPost("parse_file")]
+        public async Task<IActionResult> ParseFileAsync(string? moduleName)
+            => Content(Codeer.LowCode.Blazor.Json.JsonConverterEx.SerializeObject(
+                await BulkFileTransfer.ParseFileAsync(_dataService.Design.DesignData, _dataService.ModuleDataIO, moduleName, Request.Body)),
+                "application/json");
+
+        [HttpGet("resource")]
+        public IActionResult GetResourceAsync(string? resource)
+        {
+            var mem = AppDesign.Store.GetResource(resource ?? string.Empty);
+            return mem == null ? Ok() : this.FileWithETag(mem.ToArray(), "application/octet-stream");
+        }
+
+        //FileField の動画再生 (<video>) もここを読む (Range 要求に対応)
+        [HttpGet("download"), Audit(AuditCategory.Export)]
+        public async Task<IActionResult> DownloadFileAsync(string? moduleName, string? id, string? fieldName)
+        {
+            _audit.AddTarget(moduleName ?? string.Empty, id, $"Download:{fieldName}");
+            var range = Request.Headers.Range.ToString();
+            if (!string.IsNullOrEmpty(range)) _audit.AddNote("Range", range);
+            var location = await _dataService.ModuleDataIO.FileFieldDataIO.GetFileLocation(moduleName!, id!, fieldName!);
+            await _dataService.DbAccess.ClearAsync();
+            return this.FileWithETag(await StorageAccess.OpenReadAsync(FileStorageTable.Storages, location), location);
+        }
+
+        //未保存の添付 (今アップロードした一時ファイル・レコードのコピーの複製) の保存前のプレビュー・ダウンロード
+        [HttpGet("download_temporary"), Audit(AuditCategory.Export)]
+        public async Task<IActionResult> DownloadTemporaryFileAsync(string? moduleName, string? fieldName, Guid guid, string? fileName)
+        {
+            _audit.AddTarget(moduleName ?? string.Empty, null, $"DownloadTemporary:{fieldName}");
+            var range = Request.Headers.Range.ToString();
+            if (!string.IsNullOrEmpty(range)) _audit.AddNote("Range", range);
+            var location = await _dataService.ModuleDataIO.FileFieldDataIO.GetTemporaryFileLocation(moduleName ?? string.Empty, fieldName ?? string.Empty, guid, fileName);
+            await _dataService.DbAccess.ClearAsync();
+            return this.FileWithETag(await StorageAccess.OpenReadAsync(FileStorageTable.Storages, location), location);
+        }
+
+        [HttpPost("upload"), Audit(AuditCategory.DataWrite)]
+        public async Task<Codeer.LowCode.Blazor.DataIO.FileInfo> UploadFileAsync(string? moduleName, string? fieldName, string? fileName)
+        {
+            _audit.AddTarget(moduleName ?? string.Empty, null, $"Upload:{fieldName}");
+            var info = await _dataService.ModuleDataIO.FileFieldDataIO.GetFileSaveInfoAsync(moduleName ?? string.Empty, fieldName ?? string.Empty);
+            //本文の上限はフィールドの設定 (MaxAllowedSize、無ければ既定) で決まる。本文を読む前に入れる
+            var bodySize = HttpContext.Features.Get<IHttpMaxRequestBodySizeFeature>();
+            if (bodySize != null && !bodySize.IsReadOnly) bodySize.MaxRequestBodySize = info.MaxAllowedSize;
+            return await _dataService.TemporaryFileManager.AddFileAsync(info, fileName, Request.Body);
+        }
+
+        //レコードのコピー (CopyModule) の添付: 元の行の添付をダウンロードと同じ権限で読み、実体を複製した新しい一時ファイルにする
+        [HttpPost("copy_file"), Audit(AuditCategory.DataWrite)]
+        public async Task<Codeer.LowCode.Blazor.DataIO.FileInfo> CopyFileAsync(string? moduleName, string? fieldName, string? id)
+        {
+            _audit.AddTarget(moduleName ?? string.Empty, id, $"CopyFile:{fieldName}");
+            return await _dataService.ModuleDataIO.FileFieldDataIO.CopyFileAsync(moduleName ?? string.Empty, id ?? string.Empty, fieldName ?? string.Empty);
+        }
+    }
+}

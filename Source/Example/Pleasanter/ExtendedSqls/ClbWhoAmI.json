@@ -1,0 +1,5 @@
+{
+    "Name": "ClbWhoAmI",
+    "Api": true,
+    "CommandText": "SELECT @ipT AS \"TenantId\", @ipU AS \"UserId\", u.\"LoginId\" AS \"LoginId\", u.\"Name\" AS \"Name\" FROM \"Users\" u WHERE u.\"UserId\" = @ipU AND u.\"TenantId\" = @ipT;"
+}

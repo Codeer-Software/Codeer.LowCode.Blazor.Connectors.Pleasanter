@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="Codeer.LowCode.Blazor.Connectors.Pleasanter.Server/Codeer.LowCode.Blazor.Connectors.Pleasanter.Server.csproj" />
+  <Project Path="Codeer.LowCode.Blazor.Connectors.Pleasanter.Test/Codeer.LowCode.Blazor.Connectors.Pleasanter.Test.csproj" />
+</Solution>

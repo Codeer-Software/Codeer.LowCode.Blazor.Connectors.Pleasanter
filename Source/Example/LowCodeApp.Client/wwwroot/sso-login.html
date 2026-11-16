@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ログイン</title>
+  <base href="/" />
+  <style>
+    body { font-family: system-ui, "Segoe UI", sans-serif; background: #f5f6f8; margin: 0; }
+    .center { min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+    .card { background: #fff; border: 1px solid #e3e6ea; border-radius: 10px; padding: 32px; max-width: 360px; width: 90%; box-shadow: 0 2px 10px rgba(0,0,0,.04); text-align: center; }
+    h1 { font-size: 18px; margin: 0 0 12px; }
+    p { color: #555; font-size: 14px; line-height: 1.6; margin: 8px 0 20px; }
+    button { width: 100%; padding: 10px 16px; font-size: 15px; border: 0; border-radius: 6px; background: #2563eb; color: #fff; cursor: pointer; }
+    button:disabled { background: #9db4e6; cursor: default; }
+    .status { margin-top: 14px; font-size: 13px; color: #2563eb; min-height: 18px; }
+    .sub { margin-top: 18px; font-size: 12px; }
+    .sub a { color: #888; text-decoration: underline; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <div class="center">
+    <div class="card">
+      <h1>プリザンターでログイン</h1>
+      <p>プリザンターのログイン画面を開きます。ログインが完了すると、自動でこの画面に戻ります。</p>
+      <button id="go">プリザンターでログイン</button>
+      <div class="status" id="status"></div>
+      <div class="sub"><a id="fullLogout">プリザンターからもログアウトする</a></div>
+    </div>
+  </div>
+  <script>
+    (function () {
+      "use strict";
+      function sanitize(u) { try { if (!u || !u.startsWith("/") || u.startsWith("//")) return "/"; return u; } catch { return "/"; } }
+      const params = new URLSearchParams(location.search);
+      const returnUrl = sanitize(params.get("returnUrl"));
+      const btn = document.getElementById("go");
+      const status = document.getElementById("status");
+      const fullLogout = document.getElementById("fullLogout");
+      let loginUrl = null, logoutUrl = null, win = null, timer = null;
+
+      // プリザンター側のログイン有無を確認し、済んでいれば CLB Cookie を発行して戻る。
+      async function check() {
+        try {
+          const r = await fetch("/api/account/sso/check", { credentials: "include", cache: "no-store" });
+          if (r.ok) {
+            const j = await r.json();
+            if (j?.authenticated ?? j?.Authenticated) {
+              if (timer) clearInterval(timer);
+              try { if (win && !win.closed) win.close(); } catch { }
+              location.replace(returnUrl);
+              return true;
+            }
+          }
+        } catch { }
+        return false;
+      }
+
+      async function init() {
+        try {
+          const res = await fetch("/api/account/login_options", { credentials: "include", cache: "no-store" });
+          const o = res.ok ? await res.json() : {};
+          loginUrl = o.ssoLoginUrl ?? o.SsoLoginUrl ?? null;
+          logoutUrl = o.ssoLogoutUrl ?? o.SsoLogoutUrl ?? null;
+        } catch { }
+        // ログアウト直後(prompt=1)は自動入場しない。それ以外の初回表示では、既にプリザンターに
+        // ログイン済みならそのまま入場する(手動でここに来たとき用)。
+        if (params.get("prompt") !== "1") { await check(); }
+        if (logoutUrl) fullLogout.style.display = ""; else fullLogout.style.display = "none";
+      }
+
+      btn.addEventListener("click", async () => {
+        status.textContent = "確認しています…";
+        // プリザンターのセッションが生きていれば、画面を開かずそのまま入場。
+        if (await check()) return;
+        if (!loginUrl) { status.textContent = "ログインURLが取得できませんでした。"; return; }
+        // 未ログインのときだけプリザンターのログインを開く(ユーザー操作の中で開いてポップアップブロックを回避)。
+        win = window.open(loginUrl, "pleasanter_login");
+        btn.disabled = true;
+        status.textContent = "プリザンターのログインを待っています…";
+        if (timer) clearInterval(timer);
+        // 検知間隔は短めに。ログイン完了後、Pleasanter のホームが見える時間を最小化する。
+        timer = setInterval(check, 800);
+      });
+
+      // プリザンターごとログアウト(トップレベル遷移。プリザンターのログイン画面に移動する)。
+      fullLogout.addEventListener("click", () => { if (logoutUrl) location.href = logoutUrl; });
+
+      init();
+    })();
+  </script>
+</body>
+</html>

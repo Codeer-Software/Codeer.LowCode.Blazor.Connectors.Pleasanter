@@ -1,0 +1,180 @@
+using Codeer.LowCode.Bindings.ApexCharts;
+using Codeer.LowCode.Blazor.DbAccess;
+using Codeer.LowCode.Blazor.Extras;
+using Codeer.LowCode.Blazor.Json;
+using Codeer.LowCode.Blazor.License;
+using Microsoft.AspNetCore.ResponseCompression;
+using PdfSharp.Fonts;
+using System.Text;
+using System.Text.Json.Serialization;
+using LowCodeApp.Client.Shared.Samples;
+using LowCodeApp.Server.Infrastructure;
+using LowCodeApp.Server.Extras;
+using LowCodeApp.Server.Jobs;
+using LowCodeApp.Server.Sso;
+using Codeer.LowCode.Blazor.Extras.Server.Jobs;
+using Microsoft.Extensions.Caching.Distributed;
+using Codeer.LowCode.Blazor.Extras.Server.Excel;
+using Codeer.LowCode.Blazor.Extras.Server.Web;
+using Codeer.LowCode.Blazor.Extras.Server.AuditLog;
+using Codeer.LowCode.Blazor.Extras.Server.WebApi;
+using Microsoft.AspNetCore.SignalR;
+
+typeof(CodeBehindSample).ToString();
+ApexChartsServerInitializer.Initialize();
+ExtrasServerInitializer.Initialize();
+
+Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+
+//ジョブ (バッチ) モード: dotnet LowCodeApp.Server.dll job <ジョブ名> [引数...] (Jobs/README.md)。Web ホストは立てずジョブを 1 つ実行して終了する。
+//設定は exe の隣から読む
+var isJob = args is ["job", ..];
+//ジョブモードの標準出力・標準エラーは UTF-8
+if (isJob) Console.OutputEncoding = Encoding.UTF8;
+var builder = isJob
+    ? WebApplication.CreateBuilder(new WebApplicationOptions { Args = [], ContentRootPath = AppContext.BaseDirectory })
+    : WebApplication.CreateBuilder(args);
+
+LicenseManager.DomainLicense = builder.Configuration.GetSection("DomainLicense").Get<string>() ?? string.Empty;
+LicenseManager.IsAutoUpdate = builder.Configuration.GetSection("IsLicenseAutoUpdate").Get<bool>();
+//appsettings → SystemConfig (セクション名 = プロパティ名。設定を足すときは SystemConfig にプロパティを足す。使うものだけ書けばよい)
+builder.Configuration.Bind(SystemConfig.Instance);
+//接続文字列は ConnectionStrings:<Name> に置く (Azure Blob とファイル保存先の簡易形式は設定に直接書いてもよい)
+SystemConfig.Instance.DataSources.ToList().ForEach(e => e.ConnectionString = builder.Configuration.GetConnectionString(e.Name) ?? string.Empty);
+foreach (var storage in SystemConfig.Instance.AzureBlobStorages) if (string.IsNullOrEmpty(storage.ConnectionString) && string.IsNullOrEmpty(storage.BlobServiceUri)) storage.ConnectionString = builder.Configuration.GetConnectionString(storage.Name) ?? string.Empty;
+foreach (var storage in SystemConfig.Instance.FileStorages) if (string.IsNullOrEmpty(storage.ConnectionString)) storage.ConnectionString = builder.Configuration.GetConnectionString(storage.Name) ?? string.Empty;
+SystemConfig.Instance.WebApi = WebApiSettings.Load(builder.Configuration.GetSection("WebApi"));
+
+GlobalFontSettings.FontResolver = new CustomFontResolver(SystemConfig.Instance.FontFileDirectory);
+
+if (isJob) return await JobMode.RunAsync(args[1..], JobRunner.Names, (name, jobArgs) => JobRunner.RunAsync(builder.Configuration, name, jobArgs));
+
+builder.UseCookieAuthentication();
+
+builder.Services.AddControllersWithViews();
+builder.Services.AddRazorPages();
+
+builder.Services.AddControllers()
+      .AddJsonOptions(options =>
+      {
+          options.JsonSerializerOptions.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull;
+          options.JsonSerializerOptions.Converters.AddJsonConverters();
+      });
+
+if (SystemConfig.Instance.UseHotReload)
+{
+    builder.Services.AddSignalR();
+    builder.Services.AddHostedService(sp => new FileWatcherService(sp.GetRequiredService<IHubContext<HotReloadHub>>(), SystemConfig.Instance.DesignFileDirectory));
+}
+
+//動的な応答を圧縮する (毎回読むデザインデータなど)
+builder.Services.AddResponseCompression(options =>
+{
+    options.EnableForHttps = true;
+    options.Providers.Add<BrotliCompressionProvider>();
+    options.Providers.Add<GzipCompressionProvider>();
+    options.MimeTypes = ResponseCompressionDefaults.MimeTypes
+        .Concat(["application/octet-stream"]);
+});
+
+//画面の言語 (ブラウザの Accept-Language で日本語 / 英語)
+builder.Services.AddLowCodeLocalization();
+
+builder.Services.AddHttpContextAccessor();
+//リクエストが使うデザインは最初に参照した時点の版に固定する
+builder.Services.AddScoped<RequestDesign>();
+builder.Services.AddScoped<DataService>();
+//監査ログ (appsettings の AuditLog で有効化)。出力先は Extras/AuditSinkTable
+builder.Services.AddAuditLog(SystemConfig.Instance.AuditLog, AuditSinkTable.Create(),
+    http => http?.RequestServices.GetRequiredService<RequestDesign>().Version ?? AppDesign.Store.GetCurrent().Version);
+
+var app = builder.Build();
+//意味検索の警告ログ (埋め込みの失敗など) をアプリのログに出す
+SemanticSearchTable.Service.LoggerFactory = app.Services.GetRequiredService<ILoggerFactory>();
+//画面のボタン (JobTriggerField) から起動したジョブの失敗をアプリのログに出す
+JobProcess.LoggerFactory = app.Services.GetRequiredService<ILoggerFactory>();
+//非同期で起動したジョブの状態の置き場 (複数インスタンスでは共有キャッシュに差し替える。CookieAuthentication.cs の AddDistributedMemoryCache)
+JobProcess.Cache = app.Services.GetRequiredService<IDistributedCache>();
+
+//SQL のデバッグログ (実行した SQL とパラメータ)。appsettings の SqlLog で有効化
+if (builder.Configuration.GetSection("SqlLog").Get<bool>())
+{
+    var sqlLogger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("SqlLog");
+    DbAccessor.SqlLog = message => sqlLogger.LogInformation("{SqlLog}", message);
+}
+
+app.UseResponseCompression();
+app.UseRequestLocalization();
+
+if (app.Environment.IsDevelopment())
+{
+    app.UseWebAssemblyDebugging();
+}
+else
+{
+    app.UseExceptionHandler("/Error");
+    app.UseHsts();
+}
+
+app.UseHttpsRedirection();
+
+app.UseBlazorFrameworkFiles();
+
+//.html は常に再検証させる (配置した更新がブラウザキャッシュで古いまま見えないように)
+var htmlNoCache = new StaticFileOptions
+{
+    OnPrepareResponse = ctx =>
+    {
+        if (ctx.File.Name.EndsWith(".html", StringComparison.OrdinalIgnoreCase))
+        {
+            ctx.Context.Response.Headers.CacheControl = "no-cache";
+        }
+    }
+};
+app.UseStaticFiles(htmlNoCache);
+
+//API の応答はブラウザキャッシュしない (アクションが自分で Cache-Control を付けたときを除く)
+app.Use(async (context, next) =>
+{
+    if (context.Request.Path.StartsWithSegments("/api"))
+    {
+        context.Response.OnStarting(() =>
+        {
+            if (string.IsNullOrEmpty(context.Response.Headers.CacheControl))
+            {
+                context.Response.Headers.CacheControl = "no-store";
+            }
+            return Task.CompletedTask;
+        });
+    }
+    await next();
+});
+
+//サーバーライセンスの状態はデザインを返す前に更新する (このリクエストがデザインを読むより前に)
+app.Use(async (context, next) =>
+{
+    if (context.Request.Path.StartsWithSegments("/api/module_data/design")) await LicenseService.UpdateAsync(context.Request);
+    await next();
+});
+
+app.UseRouting();
+//監査ログは認証・認可の前に置く (401/403 も記録するため)
+app.UseAuditLog();
+
+if (SystemConfig.Instance.UseHotReload)
+{
+    app.MapHub<HotReloadHub>("/hot_reload_hub");
+}
+
+app.UseCookieAuthentication();
+//プリザンターの SSO のセッションを API の入口で確かめ直す (appsettings の PleasanterSso。使わないときは何もしない)
+app.UseMiddleware<PleasanterSsoRevalidationMiddleware>();
+
+app.MapRazorPages();
+app.MapControllers();
+app.MapFallbackToFile("index.html", htmlNoCache);
+
+app.UseExceptionHandlerSendToFront();
+
+app.Run();
+return 0;
