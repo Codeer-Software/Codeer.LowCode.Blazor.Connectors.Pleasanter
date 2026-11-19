@@ -28,6 +28,12 @@ namespace Codeer.LowCode.Blazor.Connectors.Pleasanter.Server
         /// <summary>集めた値との一致を View に書く値の数の上限 (超えたら緩めてメモリで評価する)。</summary>
         internal const int MaxViewValues = 500;
 
+        /// <summary>
+        /// プリザンターが条件の値として読み替える文字。ユーザー・組織の選択肢の列 ([[Users]] / [[Depts]] など) の条件では、
+        /// 値の "Own" を API キーの利用者 (の組織) の ID に置き換える (プリザンターの View.ConvertedValue)。この値の条件は View に書かずメモリで評価する。
+        /// </summary>
+        internal const string OwnValue = "Own";
+
         //View の条件の中間の形
         abstract record VNode;
         //SearchType は文字の列の一致 (ExactMatchMultiple) / 部分一致 (PartialMatchMultiple)。空の判定 (["\t"]) だけの葉は null (どちらでもよい)
@@ -204,7 +210,7 @@ namespace Codeer.LowCode.Blazor.Connectors.Pleasanter.Server
                             if (op == PredicateOperator.IsNull) return (new VLeaf(column.Name, null, new() { "\t" }, null), true);
                             if (predicate.Value == null || !PleasanterValues.TryConvert(column.Kind, predicate.Value, out var converted)) return (null, false);
                             var text = (string)converted;
-                            if (text.Length == 0 || text == "\t") return (null, false);
+                            if (text.Length == 0 || text == "\t" || text == OwnValue) return (null, false);
                             if (op == PredicateOperator.Equal) return (new VLeaf(column.Name, ExactMatchMultiple, new() { text }, null), true);
                             if (op == PredicateOperator.Like && !_exactColumns.Contains(column.Name)) return (new VLeaf(column.Name, PartialMatchMultiple, new() { text }, null), true);
                             return (null, false);
@@ -232,6 +238,7 @@ namespace Codeer.LowCode.Blazor.Connectors.Pleasanter.Server
                             if (predicate.Value == null || !PleasanterValues.TryConvert(column.Kind, predicate.Value, out var converted)) return (null, false);
                             var value = (DateTime)converted;
                             if (value == _emptyDate) return (null, false);
+                            if (column.Kind == PleasanterColumnKind.Date) return MapDate(column, op, value);
                             var whole = value.AddTicks(-(value.Ticks % TimeSpan.TicksPerSecond));
                             //CreatedTime / UpdatedTime は秒より細かい値を持つ (API は秒までを返す)・秒より細かい値の比較は、前後 1 秒に広げて送りメモリで評価する
                             if (column.IsSystemTime || whole != value)
@@ -267,6 +274,32 @@ namespace Codeer.LowCode.Blazor.Connectors.Pleasanter.Server
                 return (null, false);
             }
 
+            /// <summary>
+            /// 日付だけの列 (Kind = Date) の比較。読むと日付に丸める (時刻の入った値も、その日) ので、条件も日単位で書く:
+            /// = d はその日の 0:00:00〜23:59:59、&lt;= d はその日の 23:59:59 まで、&lt; d は前の日の 23:59:59 まで、&gt;= d はその日の 0:00:00 から、&gt; d は次の日から。
+            /// 条件の値に時刻があれば (本体が日時の値で比べたとき) 日付の列の値はその日の 0:00 として比べる (PostgreSQL の date と timestamp の比較と同じ):
+            /// &lt;= / &lt; はその日まで、&gt;= / &gt; は次の日から、= はどの行とも一致しない (View にはその日の範囲を書いて緩め、メモリで絞る)。
+            /// 本体の ModuleDataIO は条件の値を列の型 (日付) にしてから渡すので、時刻のある値が来るのは SQL を直接渡したときだけ。
+            /// </summary>
+            (VNode? View, bool Exact) MapDate(PleasanterColumnDefinition column, PredicateOperator op, DateTime value)
+            {
+                var day = value.Date;
+                var hasTime = value != day;
+                //空の日付の日・端の日は緩める (空の日付の行が範囲に入る・前後の日を作れない)
+                if (day == _emptyDate.Date || day <= DateTime.MinValue.AddDays(1) || DateTime.MaxValue.AddDays(-1) <= day) return (null, false);
+                string Start(DateTime d) => Format(d);
+                string End(DateTime d) => Format(d.AddDays(1).AddSeconds(-1));
+                return op switch
+                {
+                    PredicateOperator.Equal => (Range(column, Start(day), End(day)), !hasTime),
+                    PredicateOperator.LessThanOrEqual => (Range(column, string.Empty, End(day)), true),
+                    PredicateOperator.LessThan => (Range(column, string.Empty, End(hasTime ? day : day.AddDays(-1))), true),
+                    PredicateOperator.GreaterThanOrEqual => (Range(column, Start(hasTime ? day.AddDays(1) : day), string.Empty), true),
+                    PredicateOperator.GreaterThan => (Range(column, Start(day.AddDays(1)), string.Empty), true),
+                    _ => (null, false),
+                };
+            }
+
             static VLeaf Range(PleasanterColumnDefinition column, string from, string to) => new(column.Name, null, new() { from + "," + to }, null);
 
             static string Format(DateTime value) => value.ToString(PleasanterValues.DateTimeFormat, CultureInfo.InvariantCulture);
@@ -287,7 +320,7 @@ namespace Codeer.LowCode.Blazor.Connectors.Pleasanter.Server
                         case PleasanterColumnKind.String:
                             {
                                 var text = (string)converted;
-                                if (text.Length == 0 || text == "\t") return (null, false);
+                                if (text.Length == 0 || text == "\t" || text == OwnValue) return (null, false);
                                 items.Add(text);
                                 break;
                             }
@@ -301,6 +334,13 @@ namespace Codeer.LowCode.Blazor.Connectors.Pleasanter.Server
                             {
                                 var date = (DateTime)converted;
                                 if (column.IsSystemTime || date == _emptyDate || date.Ticks % TimeSpan.TicksPerSecond != 0) return (null, false);
+                                if (column.Kind == PleasanterColumnKind.Date)
+                                {
+                                    //日付だけの列はその日の範囲 (MapDate の = と同じ)。時刻のある値はどの行とも一致しないので緩める
+                                    if (date != date.Date || date.Date == _emptyDate.Date || date <= DateTime.MinValue.AddDays(1) || DateTime.MaxValue.AddDays(-1) <= date) return (null, false);
+                                    items.Add(Format(date) + "," + Format(date.AddDays(1).AddSeconds(-1)));
+                                    break;
+                                }
                                 var text = Format(date);
                                 items.Add(text + "," + text);
                                 break;

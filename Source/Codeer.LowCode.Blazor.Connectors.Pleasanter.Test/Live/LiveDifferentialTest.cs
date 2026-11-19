@@ -45,6 +45,12 @@ namespace Codeer.LowCode.Blazor.Connectors.Pleasanter.Test.Live
             yield return Customer("memo like abc", () => Value("Memo.Value", MatchComparison.Like, "abc"));
             yield return Customer("rank = A", () => Value("Rank.Value", MatchComparison.Equal, "A"));
             yield return Customer("rank is null", () => Value("Rank.Value", MatchComparison.Equal, null));
+            //プリザンターがユーザーの列の条件で読み替える値 "Own" (c1 は文字の Own、c2 は API キーの利用者の ID)
+            yield return Customer("person = Own", () => Value("Person.Value", MatchComparison.Equal, "Own"));
+            yield return Customer("person in (Own, 利用者)", () => Value("Person.Value", MatchComparison.In, new List<string> { "Own", LiveFixture.ApiUserId.ToString(CultureInfo.InvariantCulture) }));
+            yield return Customer("person like Own", () => Value("Person.Value", MatchComparison.Like, "Own"));
+            yield return Customer("person = 利用者", () => Value("Person.Value", MatchComparison.Equal, LiveFixture.ApiUserId.ToString(CultureInfo.InvariantCulture)));
+            yield return Customer("person = Own or code = K-006", () => Or(Value("Person.Value", MatchComparison.Equal, "Own"), Value("Code.Value", MatchComparison.Equal, "K-006")));
             //数値
             yield return Customer("credit = 10.5", () => Value("Credit.Value", MatchComparison.Equal, 10.5m));
             yield return Customer("credit = 0", () => Value("Credit.Value", MatchComparison.Equal, 0m));
@@ -71,6 +77,15 @@ namespace Codeer.LowCode.Blazor.Connectors.Pleasanter.Test.Live
             yield return Customer("since is null", () => Value("Since.Value", MatchComparison.Equal, null));
             yield return Customer("since is not null", () => Not(Value("Since.Value", MatchComparison.Equal, null)));
             yield return Customer("since <> 1/15", () => Value("Since.Value", MatchComparison.NotEqual, new DateOnly(2026, 1, 15)));
+            //日付だけの列に時刻の入った値 (c3 は 3/10 15:45)
+            yield return Customer("since = 3/10 (時刻あり)", () => Value("Since.Value", MatchComparison.Equal, new DateOnly(2026, 3, 10)));
+            yield return Customer("since <= 3/10 (時刻あり)", () => Value("Since.Value", MatchComparison.LessThanOrEqual, new DateOnly(2026, 3, 10)));
+            yield return Customer("since < 3/10 (時刻あり)", () => Value("Since.Value", MatchComparison.LessThan, new DateOnly(2026, 3, 10)));
+            yield return Customer("since >= 3/10 (時刻あり)", () => Value("Since.Value", MatchComparison.GreaterThanOrEqual, new DateOnly(2026, 3, 10)));
+            yield return Customer("since > 3/10 (時刻あり)", () => Value("Since.Value", MatchComparison.GreaterThan, new DateOnly(2026, 3, 10)));
+            yield return Customer("since > 3/9", () => Value("Since.Value", MatchComparison.GreaterThan, new DateOnly(2026, 3, 9)));
+            yield return Customer("since in (3/10, 1/15)", () => Value("Since.Value", MatchComparison.In, new List<DateOnly> { new(2026, 3, 10), new(2026, 1, 15) }));
+            yield return Customer("since <> 3/10 (時刻あり)", () => Value("Since.Value", MatchComparison.NotEqual, new DateOnly(2026, 3, 10)));
             yield return Customer("last = 11/1 9:30:15", () => Value("LastContact.Value", MatchComparison.Equal, new DateTime(2026, 11, 1, 9, 30, 15)));
             yield return Customer("last <= 11/2 23:59:59", () => Value("LastContact.Value", MatchComparison.LessThanOrEqual, new DateTime(2026, 11, 2, 23, 59, 59)));
             yield return Customer("last > 11/1 9:30:15", () => Value("LastContact.Value", MatchComparison.GreaterThan, new DateTime(2026, 11, 1, 9, 30, 15)));
@@ -119,6 +134,26 @@ namespace Codeer.LowCode.Blazor.Connectors.Pleasanter.Test.Live
             var view = await IdsAsync(new LiveHarness(), c);
             var memory = await IdsAsync(new LiveHarness(forceMemory: true), c);
             Assert.That(view, Is.EqualTo(memory), c.Label);
+        }
+
+        //SQL に日時の値が直接来たとき (本体は条件の値を列の型の日付にしてから渡すので、本体を通さない呼び出し)
+        [TestCase("=")]
+        [TestCase("<=")]
+        [TestCase("<")]
+        [TestCase(">=")]
+        [TestCase(">")]
+        public async Task 日付だけの列を時刻のある日時で比べてもViewの道とメモリの道が同じ(string op)
+        {
+            async Task<List<string>> QueryAsync(LiveHarness h, DateTime value)
+                => (await h.Accessor.QueryAsync(TestDesign.DataSourceName, $"select \"ResultId\" from \"Customers\" where \"DateA\" {op} @p0 order by \"ResultId\"",
+                        new() { ["@p0"] = new Codeer.LowCode.Blazor.DataIO.Db.ParamAndRawDbTypeName { Value = value } }))
+                    .Select(e => Convert.ToString(e["ResultId"], CultureInfo.InvariantCulture)!).ToList();
+            foreach (var value in new[] { new DateTime(2026, 3, 10, 12, 0, 0), new DateTime(2026, 3, 10, 15, 45, 0), new DateTime(2026, 3, 10, 23, 0, 0), new DateTime(2026, 3, 10) })
+            {
+                var view = await QueryAsync(new LiveHarness(), value);
+                var memory = await QueryAsync(new LiveHarness(forceMemory: true), value);
+                Assert.That(view, Is.EqualTo(memory), $"{op} {value:s}");
+            }
         }
 
         [Test]

@@ -82,6 +82,14 @@ namespace Codeer.LowCode.Blazor.Connectors.Pleasanter.Server
 
         public PleasanterColumnDefinition? FindColumn(string name) => Columns.FirstOrDefault(e => e.Name == name);
 
+        /// <summary>サイト ID だけを替えた定義 (列は同じものを使う)。</summary>
+        public PleasanterTableDefinition WithSiteId(long siteId)
+        {
+            var copy = new PleasanterTableDefinition { Name = Name, SiteId = siteId, ReferenceType = ReferenceType, TitleIsRaw = TitleIsRaw };
+            copy.Columns.AddRange(Columns);
+            return copy;
+        }
+
         public DbTableDefinition ToTableDefinition()
         {
             var table = new DbTableDefinition { Name = Name };
@@ -127,6 +135,13 @@ namespace Codeer.LowCode.Blazor.Connectors.Pleasanter.Server
 
         internal static bool IsExtendedColumn(string name) => ExtendedColumnPattern.IsMatch(name);
 
+        /// <summary>
+        /// コメントの列。読むとプリザンターが返すコメントの JSON の文字 ([{"CommentId","CreatedTime","Creator","Body"}...]・新しい順・無ければ "[]")、
+        /// 書くと空でない文字を新しいコメント 1 件として足す (空・null は送らない。前のコメントは変わらない)。
+        /// 条件・並び・集計には使えない (View の条件で絞れず、値は JSON なので)。
+        /// </summary>
+        internal const string CommentsColumn = "Comments";
+
         /// <summary>View の条件 (ColumnFilterHash) に書ける列か。RemainingWorkValue は計算される列で、条件に書くとプリザンターがエラー画面へのリダイレクトを返す (実物で確認)。</summary>
         internal static bool IsFilterableColumn(string name) => name != "RemainingWorkValue";
 
@@ -158,6 +173,7 @@ namespace Codeer.LowCode.Blazor.Connectors.Pleasanter.Server
             yield return ("Updator", PleasanterColumnKind.Number, false);
             yield return ("CreatedTime", PleasanterColumnKind.DateTime, true);
             yield return ("UpdatedTime", PleasanterColumnKind.DateTime, true);
+            yield return (CommentsColumn, PleasanterColumnKind.String, true);
         }
 
         // ---------------------------------------------------------------- getsite

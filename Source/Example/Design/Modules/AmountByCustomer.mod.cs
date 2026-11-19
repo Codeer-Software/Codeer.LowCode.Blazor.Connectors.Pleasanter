@@ -7,4 +7,12 @@ void DetailLayoutDesign_OnAfterInitialization()
     var amount = agg.Sum(e => e.Amount);
     agg.OrderByMeasureDescending(amount);
     Amounts.Show(agg, 1);
+
+    //受注日の月 × 区分。日付の軸は月の初日にまとまる (受注日の無い案件は空の 1 行)
+    var monthly = new ModuleAggregator<Project>();
+    monthly.GroupByMonth(e => e.OrderDate);
+    monthly.GroupBy(e => e.Category);
+    monthly.Sum(e => e.Amount);
+    monthly.OrderByGroup(0);
+    MonthlyAmounts.Show(monthly, 1);
 }

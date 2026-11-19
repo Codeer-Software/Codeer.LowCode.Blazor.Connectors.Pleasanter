@@ -33,6 +33,7 @@ namespace Codeer.LowCode.Blazor.Connectors.Pleasanter.Test.Harness
             ["Columns"] = new JsonArray(
                 Column("ClassA", "コード"),
                 Column("ClassB", "ランク", e => e["ChoicesText"] = "A,ゴールド\nB,シルバー\nC,ブロンズ"),
+                Column("ClassC", "担当", e => e["ChoicesText"] = "[[Users]]"),
                 Column("NumA", "与信", e => e["DecimalPlaces"] = 2),
                 Column("NumB", "数量", e => e["Nullable"] = true),
                 Column("DateA", "登録日", e => e["EditorFormat"] = "Ymd"),
@@ -41,7 +42,7 @@ namespace Codeer.LowCode.Blazor.Connectors.Pleasanter.Test.Harness
                 Column("DescriptionA", "メモ")),
             ["EditorColumnHash"] = new JsonObject
             {
-                ["General"] = Names("Title", "Body", "Status", "Manager", "Owner", "ClassA", "ClassB", "NumA", "NumB", "DateA", "DateB", "CheckA", "DescriptionA"),
+                ["General"] = Names("Title", "Body", "Status", "Manager", "Owner", "ClassA", "ClassB", "ClassC", "NumA", "NumB", "DateA", "DateB", "CheckA", "DescriptionA"),
             },
         };
 
@@ -98,6 +99,7 @@ namespace Codeer.LowCode.Blazor.Connectors.Pleasanter.Test.Harness
             customer.Fields.Add(new TextFieldDesign { Name = "Body", DbColumn = "Body" });
             customer.Fields.Add(new TextFieldDesign { Name = "Code", DbColumn = "ClassA" });
             customer.Fields.Add(new TextFieldDesign { Name = "Rank", DbColumn = "ClassB" });
+            customer.Fields.Add(new TextFieldDesign { Name = "Person", DbColumn = "ClassC" });
             customer.Fields.Add(new NumberFieldDesign { Name = "Credit", DbColumn = "NumA" });
             customer.Fields.Add(new NumberFieldDesign { Name = "Quantity", DbColumn = "NumB" });
             customer.Fields.Add(new DateFieldDesign { Name = "Since", DbColumn = "DateA" });

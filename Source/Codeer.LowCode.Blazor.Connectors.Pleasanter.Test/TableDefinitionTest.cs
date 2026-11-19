@@ -22,8 +22,8 @@ namespace Codeer.LowCode.Blazor.Connectors.Pleasanter.Test
             Assert.That(table.KeyColumn, Is.EqualTo("ResultId"));
             Assert.That(table.Columns.Select(e => e.Name), Is.EqualTo(new[]
             {
-                "ResultId", "Title", "Body", "Status", "Manager", "Owner", "Ver", "Creator", "Updator", "CreatedTime", "UpdatedTime",
-                "ClassA", "ClassB", "NumA", "NumB", "DateA", "DateB", "CheckA", "DescriptionA",
+                "ResultId", "Title", "Body", "Status", "Manager", "Owner", "Ver", "Creator", "Updator", "CreatedTime", "UpdatedTime", "Comments",
+                "ClassA", "ClassB", "ClassC", "NumA", "NumB", "DateA", "DateB", "CheckA", "DescriptionA",
             }));
             var c = table.Columns.ToDictionary(e => e.Name);
             Assert.That(c["NumA"].Kind, Is.EqualTo(PleasanterColumnKind.Number));

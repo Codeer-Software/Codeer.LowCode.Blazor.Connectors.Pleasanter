@@ -28,9 +28,9 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     },
     {
-      "IsRequired": true,
       "DbColumn": "Title",
       "DisplayName": "作業名",
+      "IsRequired": true,
       "Name": "Title",
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.TextFieldDesign"
     },
@@ -43,7 +43,11 @@
     {
       "SearchCondition": {
         "LimitCount": 50,
-        "ModuleName": "Project"
+        "ModuleName": "Project",
+        "Condition": {
+          "Name": "",
+          "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.MultiMatchCondition"
+        }
       },
       "ValueVariable": "Id.Value",
       "DisplayTextVariable": "Title.Value",
@@ -60,6 +64,12 @@
     },
     {
       "EnumName": "担当者",
+      "SearchCondition": {
+        "Condition": {
+          "Name": "",
+          "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.MultiMatchCondition"
+        }
+      },
       "DbColumn": "ClassB",
       "DisplayName": "担当者",
       "Name": "Assignee",
@@ -108,8 +118,8 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     },
     {
-      "Format": "#,0.##",
       "DbColumn": "WorkValue",
+      "Format": "#,0.##",
       "DisplayName": "作業量",
       "Name": "WorkValue",
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.NumberFieldDesign"
@@ -121,8 +131,8 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     },
     {
-      "Format": "#,0.##",
       "DbColumn": "ProgressRate",
+      "Format": "#,0.##",
       "DisplayName": "進捗率",
       "Name": "ProgressRate",
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.NumberFieldDesign"
@@ -134,8 +144,8 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     },
     {
-      "Format": "#,0.##",
       "DbColumn": "RemainingWorkValue",
+      "Format": "#,0.##",
       "DisplayName": "残作業量",
       "Name": "RemainingWorkValue",
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.NumberFieldDesign"
@@ -360,8 +370,8 @@
               {
                 "Layout": {
                   "FieldName": "RemainingWorkValue",
-                  "IsViewOnly": true,
                   "Name": "",
+                  "IsViewOnly": true,
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
                 }
               }

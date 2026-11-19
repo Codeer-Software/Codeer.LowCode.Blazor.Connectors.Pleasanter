@@ -2,6 +2,9 @@
   "Name": "AppUser",
   "DataSourceName": "Main",
   "DbTable": "app_users",
+  "CanCreate": false,
+  "CanUpdate": false,
+  "CanDelete": false,
   "Fields": [
     {
       "DbColumn": "id",
@@ -24,20 +27,19 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.TextFieldDesign"
     },
     {
-      "Name": "パスワード",
-      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.PasswordFieldDesign"
+      "DbColumn": "is_admin",
+      "Name": "管理者",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.BooleanFieldDesign"
     },
     {
       "LoginName": "ユーザー識別名",
       "ExternalLoginName": "メール",
       "DisplayName": "表示名",
-      "PasswordField": "パスワード",
       "DbColumnPasswordHash": "hash",
       "DbColumnPasswordSalt": "salt",
       "DbColumnSessionStamp": "session_stamp",
       "HasPassword": true,
       "HasSessionStamp": true,
-      "WritesPassword": true,
       "Name": "LoginAccount",
       "TypeFullName": "Codeer.LowCode.Blazor.Extras.Designs.LoginAccountContractFieldDesign"
     },
@@ -46,10 +48,6 @@
       "Style": "H2",
       "Name": "ラベル",
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
-    },
-    {
-      "Name": "サブミットボタン",
-      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.SubmitButtonFieldDesign"
     },
     {
       "Text": "",
@@ -71,8 +69,8 @@
     },
     {
       "Text": "",
-      "RelativeField": "パスワード",
-      "Name": "パスワードLabel",
+      "RelativeField": "管理者",
+      "Name": "管理者Label",
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     },
     {
@@ -81,13 +79,15 @@
       "TitleText": "",
       "Name": "アンカータグ",
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.AnchorTagFieldDesign"
-    },
-    {
-      "DbColumnSessionStamp": "session_stamp",
-      "Name": "全端末ログアウト",
-      "TypeFullName": "Codeer.LowCode.Blazor.Extras.Designs.SessionRevokeButtonFieldDesign"
     }
   ],
+  "DataReadCondition": {
+    "Condition": {
+      "SearchTargetVariable": "Id.Value",
+      "Variable": "CurrentUser.Id.Value",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldVariableMatchCondition"
+    }
+  },
   "DetailLayouts": {
     "": {
       "Layout": {
@@ -178,7 +178,7 @@
             "Columns": [
               {
                 "Layout": {
-                  "FieldName": "パスワードLabel",
+                  "FieldName": "管理者Label",
                   "Name": "",
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
                 },
@@ -187,33 +187,10 @@
               },
               {
                 "Layout": {
-                  "FieldName": "パスワード",
+                  "FieldName": "管理者",
                   "Name": "",
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
                 }
-              }
-            ]
-          },
-          {
-            "Columns": [
-              {
-                "Layout": {
-                  "FieldName": "全端末ログアウト",
-                  "Name": "",
-                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
-                }
-              }
-            ]
-          },
-          {
-            "Columns": [
-              {
-                "Layout": {
-                  "FieldName": "サブミットボタン",
-                  "Name": "",
-                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
-                },
-                "HorizontalAlignment": "Center"
               }
             ]
           }
@@ -234,6 +211,9 @@
           },
           {
             "FieldName": "メール"
+          },
+          {
+            "FieldName": "管理者"
           }
         ]
       ]

@@ -51,25 +51,36 @@ namespace Codeer.LowCode.Blazor.Connectors.Pleasanter.Test.Live
         }
 
         [Test]
-        public async Task 表の定義ファイルを実物から書き出せる()
+        public async Task 日付の軸で集計する()
         {
-            var connection = new PleasanterConnection(LiveFixture.CreateSettings());
-            var directory = Path.Combine(Path.GetTempPath(), "clb-pleasanter-test-" + Guid.NewGuid().ToString("N"));
-            Directory.CreateDirectory(directory);
-            try
+            var h = new LiveHarness();
+            var byMonth = new AggregateCondition("Order");
+            byMonth.Groups.Add(new DateGroup { Variable = "OrderDate.Value", Bucket = DateBucket.Month });
+            byMonth.Measures.Add(new AggregateMeasure { Function = AggregateFunction.Count });
+            byMonth.Measures.Add(new AggregateMeasure { Function = AggregateFunction.Sum, Variable = "Amount.Value" });
+            var months = (await h.IO.AggregateAsync(byMonth)).Rows.Select(e => (e.Key(0), e.Number(0), e.Number(1))).ToList();
+            Assert.That(months, Is.EqualTo(new List<(object?, decimal?, decimal?)>
             {
-                await PleasanterMetadataFile.UpdateAsync(connection, directory);
-                var path = PleasanterMetadataFile.GetPath(directory, "PL");
-                Assert.That(File.Exists(path), Is.True);
-                var text = await File.ReadAllTextAsync(path);
-                Assert.That(text, Does.Contain("\"Customers\""));
-                Assert.That(text, Does.Contain("ゴールド"));
-                Assert.That(text, Does.Not.Contain(LiveFixture.Url.TrimEnd('/')), "接続先を書き出さない");
-            }
-            finally
+                (new DateOnly(2026, 9, 1), 1m, 50m),
+                (new DateOnly(2026, 10, 1), 1m, 15000m),
+                (new DateOnly(2026, 11, 1), 6m, 1000m + 2500.5m + 0m + 700m + 12000m + 99999m),
+                (null, 1m, 300m),
+            }));
+
+            //c3 の登録日は 3/10 15:45 (日付だけの列に時刻の入った値)。年度は 4 月始まり
+            var byQuarter = new AggregateCondition("Customer");
+            byQuarter.Groups.Add(new DateGroup { Variable = "Since.Value", Bucket = DateBucket.Quarter, FiscalYearStartMonth = 4 });
+            byQuarter.Measures.Add(new AggregateMeasure { Function = AggregateFunction.Count });
+            var quarters = (await h.IO.AggregateAsync(byQuarter)).Rows.Select(e => (e.Key(0), e.Number(0))).ToList();
+            Assert.That(quarters, Is.EqualTo(new List<(object?, decimal?)>
             {
-                if (Directory.Exists(directory)) Directory.Delete(directory, true);
-            }
+                (new DateOnly(2025, 10, 1), 1m), (new DateOnly(2026, 1, 1), 4m), (new DateOnly(2026, 4, 1), 1m), (null, 2m),
+            }));
+
+            var byDay = new AggregateCondition("Customer") { Condition = Value("Since.Value", MatchComparison.Equal, new DateOnly(2026, 3, 10)) };
+            byDay.Groups.Add(new DateGroup { Variable = "Since.Value", Bucket = DateBucket.Day });
+            byDay.Measures.Add(new AggregateMeasure { Function = AggregateFunction.Count });
+            Assert.That((await h.IO.AggregateAsync(byDay)).Rows.Select(e => (e.Key(0), e.Number(0))), Is.EqualTo(new[] { ((object?)new DateOnly(2026, 3, 10), (decimal?)1m) }));
         }
     }
 }

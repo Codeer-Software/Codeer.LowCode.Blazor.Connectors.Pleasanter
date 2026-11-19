@@ -55,6 +55,34 @@ namespace Codeer.LowCode.Blazor.Connectors.Pleasanter.Server
         static bool IsNumber(object value) => value is sbyte or byte or short or ushort or int or uint or long or ulong or float or double or decimal;
 
         /// <summary>
+        /// 拡張 SQL のパラメータ (Params の値) にする。数値・真偽は JSON の数値・真偽、日付と日時は yyyy-MM-ddTHH:mm:ss (プリザンターが日時として受け取る)、
+        /// 時刻は HH:mm:ss、それ以外は文字。null は JSON の null (プリザンターは null のパラメータをエラーにする)。
+        /// </summary>
+        internal static System.Text.Json.Nodes.JsonNode? ToExtendedSqlParameter(object? value) => value switch
+        {
+            null or DBNull => null,
+            bool b => b,
+            _ when IsNumber(value) => ToDecimal(value),
+            DateTime dateTime => dateTime.ToString(DateTimeFormat, CultureInfo.InvariantCulture),
+            DateOnly date => date.ToDateTime(TimeOnly.MinValue).ToString(DateTimeFormat, CultureInfo.InvariantCulture),
+            DateTimeOffset offset => offset.DateTime.ToString(DateTimeFormat, CultureInfo.InvariantCulture),
+            TimeOnly time => time.ToString("HH:mm:ss", CultureInfo.InvariantCulture),
+            TimeSpan span => span.ToString("c", CultureInfo.InvariantCulture),
+            _ => Convert.ToString(value, CultureInfo.InvariantCulture),
+        };
+
+        /// <summary>拡張 SQL の結果の値: 整数は long、それ以外の数値は decimal、文字・真偽はそのまま、null は null。</summary>
+        internal static object? FromExtendedSqlValue(JsonElement element) => element.ValueKind switch
+        {
+            JsonValueKind.Number => element.TryGetInt64(out var integer) ? integer : element.TryGetDecimal(out var number) ? number : element.GetDouble(),
+            JsonValueKind.String => element.GetString(),
+            JsonValueKind.True => true,
+            JsonValueKind.False => false,
+            JsonValueKind.Null or JsonValueKind.Undefined => null,
+            _ => element.GetRawText(),
+        };
+
+        /// <summary>
         /// 本体のパラメータの値を列の種類の比較用の値にする (数値 = decimal・日付と日時 = DateTime・真偽 = bool・文字 = string)。
         /// 列の種類で表せない値 (数値の列に数値でない文字など) は false。
         /// </summary>

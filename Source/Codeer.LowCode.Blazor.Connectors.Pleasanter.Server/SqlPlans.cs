@@ -130,8 +130,13 @@ namespace Codeer.LowCode.Blazor.Connectors.Pleasanter.Server
 
     /// <summary>集計の SQL の式。</summary>
     abstract record AggregateExpression;
-    /// <summary>列 ("別名"."列")。</summary>
-    record AggregateColumn(string Alias, string Column) : AggregateExpression;
+    /// <summary>列 ("別名"."列")。Bucket があれば、日付・日時の列を期間の開始に丸めた値 (本体の日付の軸)。</summary>
+    record AggregateColumn(string Alias, string Column, DateBucketSpec? Bucket = null) : AggregateExpression;
+    /// <summary>
+    /// 日付の丸め (PostgreSQL の date_trunc)。Unit は hour / day / week / month / quarter / year。
+    /// ShiftMinutes は丸める前に足す分 (interval 'N minutes')、FiscalMonths は四半期・年を切る前に引いて丸めた後に足す月数 (interval 'N months')。
+    /// </summary>
+    record DateBucketSpec(string Unit, int ShiftMinutes, int FiscalMonths);
     /// <summary>case when 列 is null then 1 else 0 end (空値を最後に並べる印)。</summary>
     record AggregateNullFlag(AggregateColumn Column) : AggregateExpression;
     /// <summary>case 列 when 'a' then 0 ... else n end (候補の順)。</summary>

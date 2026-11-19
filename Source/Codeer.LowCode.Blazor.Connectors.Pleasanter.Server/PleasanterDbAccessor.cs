@@ -1,5 +1,6 @@
 using Codeer.LowCode.Blazor.DataIO.Db;
 using Codeer.LowCode.Blazor.DataIO.Db.Definition;
+using Codeer.LowCode.Blazor.Repository.Design;
 using Codeer.LowCode.Blazor.SystemSettings;
 using System.Data;
 using System.Data.Common;
@@ -17,26 +18,36 @@ namespace Codeer.LowCode.Blazor.Connectors.Pleasanter.Server
     {
         readonly IDbAccessor _inner;
         readonly Dictionary<string, PleasanterConnection> _connections;
-        readonly string? _metadataDirectory;
+        readonly PleasanterMetadataFile? _metadataFile;
 
         /// <param name="inner">プリザンター以外のデータソースを受け持つ IDbAccessor。</param>
         /// <param name="connections">プリザンターへの接続 (<see cref="PleasanterConnection.FromDataSources"/>)。</param>
-        /// <param name="metadataDirectory">
-        /// 指定すると、表の定義をこのフォルダに保存したファイル (<see cref="PleasanterMetadataFile"/>) から答える (プリザンターに取りに行かない)。デザイナ用。
+        /// <param name="metadataFile">
+        /// 表の定義の出所。指定すると表の定義をこのファイルから読み、プリザンターに取りに行かない (ファイルに無い表は無い)。
+        /// デザイナは <see cref="PleasanterMetadataFile.FromProject"/>、Web アプリは <see cref="PleasanterMetadataFile.FromDeployedDesign"/>。
+        /// null なら表ごとに最初の 1 回プリザンターのサイトの設定 (getsite) を読む。
         /// </param>
-        public PleasanterDbAccessor(IDbAccessor inner, IEnumerable<PleasanterConnection> connections, string? metadataDirectory = null)
+        public PleasanterDbAccessor(IDbAccessor inner, IEnumerable<PleasanterConnection> connections, PleasanterMetadataFile? metadataFile = null)
         {
             _inner = inner;
             _connections = connections.ToDictionary(e => e.Settings.Name);
-            _metadataDirectory = metadataDirectory;
+            _metadataFile = metadataFile;
         }
 
         PleasanterConnection? Find(string dataSourceName)
             => _connections.TryGetValue(dataSourceName, out var connection) ? connection : null;
 
-        //保存してある定義。ファイルから答えない設定なら null
-        List<PleasanterTableDefinition>? LoadSavedDefinitions(PleasanterConnection connection)
-            => string.IsNullOrEmpty(_metadataDirectory) ? null : PleasanterMetadataFile.Load(_metadataDirectory, connection.Settings.Name) ?? new();
+        //表の定義。ファイルから読むときは、サイト ID を接続文字列の Sites のものにする (ファイルのサイト ID は書き出した環境のもの)
+        Task<PleasanterTableDefinition> GetDefinitionAsync(PleasanterConnection connection, string table)
+        {
+            if (_metadataFile == null) return connection.GetTableDefinitionAsync(table);
+            if (!connection.Settings.Sites.TryGetValue(table, out var siteId))
+                throw new PleasanterException($"Pleasanter data source '{connection.Settings.Name}': table '{table}' is not in Sites of the connection string.", PleasanterErrorKind.NotFound);
+            var definition = _metadataFile.Load(connection.Settings.Name).FirstOrDefault(e => e.Name == table) ?? throw _metadataFile.TableNotFound(connection.Settings.Name, table);
+            return Task.FromResult(definition.WithSiteId(siteId));
+        }
+
+        Func<string, Task<PleasanterTableDefinition>> DefinitionResolver(PleasanterConnection connection) => table => GetDefinitionAsync(connection, table);
 
         public DataSource? GetDataSource(string dataSource)
         {
@@ -72,12 +83,42 @@ namespace Codeer.LowCode.Blazor.Connectors.Pleasanter.Server
         public object? ConvertDbValueToFieldValue(string dataSourceName, object dbValue, Type fieldType)
             => Find(dataSourceName) == null ? _inner.ConvertDbValueToFieldValue(dataSourceName, dbValue, fieldType) : null;
 
-        /// <summary>プリザンターのデータソースでは SQL・ストアドプロシージャを実行できない (ExecuteSqlField は未対応)。</summary>
+        /// <summary>
+        /// プリザンターのデータソースでは、ストアドプロシージャ (CommandType = StoredProcedure) をプリザンターの拡張 SQL (api/extended/sql) として実行する。
+        /// CommandText が拡張 SQL の名前 (Name)。入力のパラメータ (Input / InputOutput) を Params に入れる (名前の先頭の @ は外す)。
+        /// 結果は最初の表の最初の行: Scalar の ReturnValue は先頭の列の値、NonQuery の ReturnValue は -1 (件数は分からない)、Reader は null。
+        /// 出力のパラメータ (Output / InputOutput / ReturnValue) は同じ名前の列の値 (無ければ null)。拡張 SQL は書き込みとして扱う (やり直さない)。
+        /// SQL 文は実行できない。
+        /// </summary>
         public async Task<DbSqlCommandResult> ExecuteSqlCommandAsync(string dataSourceName, DbSqlCommand command)
         {
-            if (Find(dataSourceName) == null) return await _inner.ExecuteSqlCommandAsync(dataSourceName, command);
-            throw new PleasanterException("SQL and stored procedures cannot be executed on a Pleasanter data source.");
+            var connection = Find(dataSourceName);
+            if (connection == null) return await _inner.ExecuteSqlCommandAsync(dataSourceName, command);
+            if (command.CommandType != ExecuteSqlCommandType.StoredProcedure)
+                throw new PleasanterException("SQL cannot be executed on a Pleasanter data source. To run an extended SQL of Pleasanter, set the command type to StoredProcedure and the name of the extended SQL as the text.");
+
+            var name = command.CommandText.Trim();
+            var parameters = new JsonObject();
+            foreach (var parameter in command.Parameters.Where(e => e.Direction is ParameterDirection.Input or ParameterDirection.InputOutput))
+                parameters[ParameterName(parameter.Name)] = PleasanterValues.ToExtendedSqlParameter(parameter.Value);
+
+            var row = await connection.ExecuteExtendedSqlAsync(name, parameters);
+            object? Column(string column) => row?.FirstOrDefault(e => e.Name == column).Value;
+            var result = new DbSqlCommandResult
+            {
+                ReturnValue = command.MethodType switch
+                {
+                    ExecuteSqlMethodType.Scalar => row?.FirstOrDefault().Value,
+                    ExecuteSqlMethodType.NonQuery => -1,
+                    _ => null,
+                },
+            };
+            foreach (var parameter in command.Parameters)
+                result.ParameterValues.TryAdd(parameter.Name, parameter.Direction == ParameterDirection.Input ? parameter.Value : Column(ParameterName(parameter.Name)));
+            return result;
         }
+
+        static string ParameterName(string name) => name.TrimStart('@', ':');
 
         // ---------------------------------------------------------------- 定義
 
@@ -85,7 +126,9 @@ namespace Codeer.LowCode.Blazor.Connectors.Pleasanter.Server
         {
             var connection = Find(dataSourceName);
             if (connection == null) return await _inner.GetCustomTableDefinitionsAsync(dataSourceName);
-            if (LoadSavedDefinitions(connection) is { } saved) return saved.Select(e => e.ToTableDefinition()).ToList();
+            //ファイルから読むときは、ファイルにあって接続文字列の Sites にもある表
+            if (_metadataFile != null)
+                return _metadataFile.Load(connection.Settings.Name).Where(e => connection.Settings.Sites.ContainsKey(e.Name)).Select(e => e.ToTableDefinition()).ToList();
             return (await connection.GetTableDefinitionsAsync()).Select(e => e.ToTableDefinition()).ToList();
         }
 
@@ -93,14 +136,7 @@ namespace Codeer.LowCode.Blazor.Connectors.Pleasanter.Server
         {
             var connection = Find(dataSourceName);
             if (connection == null) return await _inner.GetCustomTableDefinitionsAsync(dataSourceName, tableNames);
-            if (LoadSavedDefinitions(connection) is { } saved)
-            {
-                var definition = saved.FirstOrDefault(e => e.Name == tableNames);
-                if (definition == null)
-                    throw new PleasanterException($"Table '{tableNames}' is not in the saved Pleasanter metadata of data source '{dataSourceName}'. Update the Pleasanter metadata.");
-                return definition.ToTableDefinition();
-            }
-            return (await connection.GetTableDefinitionAsync(tableNames)).ToTableDefinition();
+            return (await GetDefinitionAsync(connection, tableNames)).ToTableDefinition();
         }
 
         // ---------------------------------------------------------------- 読み出し
@@ -112,11 +148,11 @@ namespace Codeer.LowCode.Blazor.Connectors.Pleasanter.Server
             return await QueryCoreAsync(connection, query, args.ToDictionary(e => e.Key, e => e.Value.Value));
         }
 
-        static async Task<List<IDictionary<string, object>>> QueryCoreAsync(PleasanterConnection connection, string query, Dictionary<string, object?> args)
+        async Task<List<IDictionary<string, object>>> QueryCoreAsync(PleasanterConnection connection, string query, Dictionary<string, object?> args)
         {
             if (SqlTranslator.IsAggregate(query))
-                return await QueryExecutor.AggregateAsync(connection, await SqlTranslator.TranslateAggregateAsync(query, args, connection.GetTableDefinitionAsync));
-            return await QueryExecutor.ReadAsync(connection, await SqlTranslator.TranslateSelectAsync(query, args, connection.GetTableDefinitionAsync));
+                return await QueryExecutor.AggregateAsync(connection, await SqlTranslator.TranslateAggregateAsync(query, args, DefinitionResolver(connection)));
+            return await QueryExecutor.ReadAsync(connection, await SqlTranslator.TranslateSelectAsync(query, args, DefinitionResolver(connection)));
         }
 
         // ---------------------------------------------------------------- 書き込み
@@ -177,18 +213,18 @@ namespace Codeer.LowCode.Blazor.Connectors.Pleasanter.Server
             throw SqlTranslator.NotSupported(query);
         }
 
-        static async Task<string> InsertRowAsync(PleasanterConnection connection, InsertPlan insert, List<string> parameters, Dictionary<string, object?> args)
+        async Task<string> InsertRowAsync(PleasanterConnection connection, InsertPlan insert, List<string> parameters, Dictionary<string, object?> args)
         {
-            var definition = await connection.GetTableDefinitionAsync(insert.Table);
+            var definition = await GetDefinitionAsync(connection, insert.Table);
             if (!string.IsNullOrEmpty(insert.ReturningColumn) && insert.ReturningColumn != definition.KeyColumn) throw IdNotKey(definition);
             var body = CreateBody(connection, definition, insert.Columns.Zip(parameters).ToList(), args, true);
             var id = await connection.CreateAsync(definition, body);
             return id.ToString(CultureInfo.InvariantCulture);
         }
 
-        static async Task<PleasanterTableDefinition> GetWritableDefinitionAsync(PleasanterConnection connection, WritePlan write)
+        async Task<PleasanterTableDefinition> GetWritableDefinitionAsync(PleasanterConnection connection, WritePlan write)
         {
-            var definition = await connection.GetTableDefinitionAsync(write.Table);
+            var definition = await GetDefinitionAsync(connection, write.Table);
             if (write.KeyColumn != definition.KeyColumn) throw IdNotKey(definition);
             return definition;
         }
@@ -207,7 +243,7 @@ namespace Codeer.LowCode.Blazor.Connectors.Pleasanter.Server
 
         //書き込みの前に、サイトの URL + ID の条件 (+ SQL に付いていたほかの条件 = 楽観ロック・論理削除など) で対象の行を数えて確かめる。
         //レコードの URL (api/items/{id}/update) は別のサイトの行でも通るので、いつも確かめる。確かめてから書くまでの間に別の更新が入ることは防げない
-        static async Task<bool> ExistsAsync(PleasanterConnection connection, WritePlan write, Dictionary<string, object?> args)
+        async Task<bool> ExistsAsync(PleasanterConnection connection, WritePlan write, Dictionary<string, object?> args)
         {
             var rows = await QueryCoreAsync(connection, $"select count(*) from \"{write.Table}\" where {write.WhereSql}", args);
             var count = rows.FirstOrDefault()?.Values.FirstOrDefault();
@@ -235,6 +271,8 @@ namespace Codeer.LowCode.Blazor.Connectors.Pleasanter.Server
                     throw new PleasanterException($"Column '{name}' of Pleasanter table '{definition.Name}' is read-only (id, version, creator, updater, created / updated time or remaining work value) and cannot be written.");
                 }
                 if (isInsert && value == null) continue;
+                //コメントは足すだけ (空は送らない。空を送っても消えない)
+                if (column.Name == PleasanterTableDefinition.CommentsColumn && string.IsNullOrEmpty(value as string)) continue;
                 var node = ToJson(connection, definition, column, value);
                 if (column.HashName is { } hashName)
                 {

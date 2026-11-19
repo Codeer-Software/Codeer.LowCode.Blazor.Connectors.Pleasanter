@@ -35,6 +35,9 @@ namespace Codeer.LowCode.Blazor.Connectors.Pleasanter.Test.Live
 
         public const int ManyCount = 205;
 
+        /// <summary>API キーの利用者のユーザー ID (入れた行の作成者)。</summary>
+        public static long ApiUserId { get; private set; }
+
         static readonly List<long> _createdSites = new();
 
         [OneTimeSetUp]
@@ -142,13 +145,14 @@ namespace Codeer.LowCode.Blazor.Connectors.Pleasanter.Test.Live
         static async Task SeedAsync()
         {
             async Task Customer(string key, string title, string? code = null, string? rank = null, decimal? credit = null, decimal? quantity = null,
-                string? since = null, string? lastContact = null, bool? active = null, string? memo = null, int? status = null)
+                string? since = null, string? lastContact = null, bool? active = null, string? memo = null, int? status = null, string? person = null)
             {
                 var body = new JsonObject { ["Title"] = title };
                 if (status != null) body["Status"] = status;
                 var classes = new List<(string, JsonNode?)>();
                 if (code != null) classes.Add(("ClassA", code));
                 if (rank != null) classes.Add(("ClassB", rank));
+                if (person != null) classes.Add(("ClassC", person));
                 if (classes.Count != 0) body["ClassHash"] = Hash(classes.ToArray());
                 var nums = new List<(string, JsonNode?)>();
                 if (credit != null) nums.Add(("NumA", credit));
@@ -163,9 +167,11 @@ namespace Codeer.LowCode.Blazor.Connectors.Pleasanter.Test.Live
                 Customers[key] = await CreateAsync(CustomersId, body);
             }
 
-            await Customer("c1", "株式会社アルファ", "K-001", "A", 500000m, 10m, "2026-01-15T00:00:00", "2026-11-01T09:30:15", true, "優良 100%_達成", 100);
-            await Customer("c2", "ベータ商事", "K-002", "B", 0m, 0m, "2026-02-01T00:00:00", "2026-11-02T23:59:59", false, "abc", 200);
-            await Customer("c3", "ガンマ工業", "k-003", "C", -3.25m, null, "2026-03-10T00:00:00", null, true, null, 200);
+            //担当 (ClassC・ユーザーの選択肢) は、c1 に文字の "Own"、c2 に API キーの利用者の ID (条件の値の "Own" をプリザンターが読み替えるかを見る)
+            await Customer("c1", "株式会社アルファ", "K-001", "A", 500000m, 10m, "2026-01-15T00:00:00", "2026-11-01T09:30:15", true, "優良 100%_達成", 100, "Own");
+            ApiUserId = (await GetRecordAsync(CustomersId, Customers["c1"]))!["Creator"]!.GetValue<long>();
+            await Customer("c2", "ベータ商事", "K-002", "B", 0m, 0m, "2026-02-01T00:00:00", "2026-11-02T23:59:59", false, "abc", 200, ApiUserId.ToString(CultureInfo.InvariantCulture));
+            await Customer("c3", "ガンマ工業", "k-003", "C", -3.25m, null, "2026-03-10T15:45:00", null, true, null, 200);
             await Customer("c4", "デルタ");
             await Customer("c5", "Epsilon Ltd", "", "A", 10.5m, 5m, "2026-01-15T00:00:00", "2026-11-03T00:00:00", false, "ABC def", 900);
             await Customer("c6", "O'Hara & Co", "K-006", "B", 1234567.89m, 3m, "2025-12-31T00:00:00", "2026-10-31T12:00:00", true, "x", 100);
@@ -221,11 +227,12 @@ namespace Codeer.LowCode.Blazor.Connectors.Pleasanter.Test.Live
         public ModuleDataIO IO { get; }
 
         /// <param name="forceMemory">条件を View に書かずに全部読んでメモリで評価する (差分のテスト用)。</param>
-        public LiveHarness(bool forceMemory = false, Action<PleasanterConnectionSettings>? edit = null, Action<DesignData>? editDesign = null)
+        /// <param name="metadataFile">表の定義の出所 (null ならサイトの設定を読む)。</param>
+        public LiveHarness(bool forceMemory = false, Action<PleasanterConnectionSettings>? edit = null, Action<DesignData>? editDesign = null, PleasanterMetadataFile? metadataFile = null)
         {
             //接続ごとに定義のキャッシュを持つので、テストごとに新しい接続 (FromDataSources の共有の接続は使わない)
             Connection = new PleasanterConnection(LiveFixture.CreateSettings(edit)) { ForceMemoryEvaluation = forceMemory };
-            Accessor = new PleasanterDbAccessor(Inner, new[] { Connection });
+            Accessor = new PleasanterDbAccessor(Inner, new[] { Connection }, metadataFile);
             Design = TestDesign.CreateDesign(editDesign);
             IO = new ModuleDataIO(Design, new TestDesign.Auth(), Accessor, null!);
         }

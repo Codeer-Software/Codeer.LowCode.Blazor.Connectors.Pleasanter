@@ -28,10 +28,11 @@
 アプリとデザイナの `IDbAccessor` を包みます。
 
 ```csharp
-//アプリ (サーバー)
-var pleasanter = new PleasanterDbAccessor(new DbAccessor(dataSources), PleasanterConnection.FromDataSources(dataSources));
+//アプリ (サーバー)。サイトの定義は、配られたデザインに入っているメタ情報のファイルから読む
+var pleasanter = new PleasanterDbAccessor(new DbAccessor(dataSources), PleasanterConnection.FromDataSources(dataSources),
+    PleasanterMetadataFile.FromDeployedDesign(designFileDirectory));
 
-//デザイナ (サイトの定義は、Tools > プリザンターのメタ情報を更新 で保存したファイルから読む)
+//デザイナ (サイトの定義は、Tools > プリザンターのメタ情報を更新 でプロジェクトに保存したファイルから読む)
 var pleasanter = PleasanterDesignerInitializer.CreateDbAccessor(new DbAccessor(dataSources), dataSources);
 ```
 

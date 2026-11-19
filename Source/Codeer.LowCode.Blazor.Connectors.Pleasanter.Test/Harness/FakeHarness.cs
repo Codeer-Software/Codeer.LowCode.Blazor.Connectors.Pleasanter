@@ -24,14 +24,16 @@ namespace Codeer.LowCode.Blazor.Connectors.Pleasanter.Test.Harness
         public DesignData Design { get; }
         public ModuleDataIO IO { get; }
 
-        public FakeHarness(Action<PleasanterConnectionSettings>? edit = null, Action<DesignData>? editDesign = null)
+        /// <param name="editAccessor">コネクターの作り方を替えるとき (表の定義の出所を渡すなど)。</param>
+        public FakeHarness(Action<PleasanterConnectionSettings>? edit = null, Action<DesignData>? editDesign = null,
+            Func<RecordingDbAccessor, PleasanterConnection, PleasanterDbAccessor>? editAccessor = null)
         {
             Fake.Sites[CustomersId] = TestDesign.SiteData(CustomersId, "Results", TestDesign.CustomersSettings());
             Fake.Sites[OrdersId] = TestDesign.SiteData(OrdersId, "Results", TestDesign.OrdersSettings(CustomersId));
             Fake.Sites[TasksId] = TestDesign.SiteData(TasksId, "Issues", TestDesign.TasksSettings(CustomersId));
             Fake.Sites[ManyId] = TestDesign.SiteData(ManyId, "Results", TestDesign.ManySettings());
             Connection = CreateConnection(Fake, Delays, edit);
-            Accessor = new PleasanterDbAccessor(Inner, new[] { Connection });
+            Accessor = editAccessor?.Invoke(Inner, Connection) ?? new PleasanterDbAccessor(Inner, new[] { Connection });
             Design = TestDesign.CreateDesign(editDesign);
             IO = new ModuleDataIO(Design, new TestDesign.Auth(), Accessor, null!);
         }

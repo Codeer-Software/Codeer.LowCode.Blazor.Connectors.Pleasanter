@@ -23,8 +23,9 @@ namespace LowCodeApp.Server.Infrastructure
             Design = design ?? new RequestDesign();
             DbAccess = new DbAccessor(SystemConfig.Instance.DataSources);
             TemporaryFileManager = new TemporaryFileManager(DbAccess, SystemConfig.Instance.TemporaryFileTableInfo, FileStorageTable.Storages, this);
-            //プリザンターのデータソースはコネクターが、それ以外は DbAccess が受け持つ
-            var pleasanter = new PleasanterDbAccessor(DbAccess, PleasanterConnection.FromDataSources(SystemConfig.Instance.DataSources));
+            //プリザンターのデータソースはコネクターが、それ以外は DbAccess が受け持つ。表の定義は配られたデザインのメタ情報のファイルから読む
+            var pleasanter = new PleasanterDbAccessor(DbAccess, PleasanterConnection.FromDataSources(SystemConfig.Instance.DataSources),
+                PleasanterMetadataFile.FromDeployedDesign(SystemConfig.Instance.DesignFileDirectory));
             ModuleDataIO = new CustomizedModuleDataIO(Design.DesignData, this, pleasanter, TemporaryFileManager);
         }
 

@@ -28,9 +28,9 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     },
     {
-      "IsRequired": true,
       "DbColumn": "Title",
       "DisplayName": "案件名",
+      "IsRequired": true,
       "Name": "Title",
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.TextFieldDesign"
     },
@@ -43,7 +43,11 @@
     {
       "SearchCondition": {
         "LimitCount": 50,
-        "ModuleName": "Customer"
+        "ModuleName": "Customer",
+        "Condition": {
+          "Name": "",
+          "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.MultiMatchCondition"
+        }
       },
       "ValueVariable": "Id.Value",
       "DisplayTextVariable": "Name.Value",
@@ -60,6 +64,12 @@
     },
     {
       "EnumName": "案件区分",
+      "SearchCondition": {
+        "Condition": {
+          "Name": "",
+          "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.MultiMatchCondition"
+        }
+      },
       "DbColumn": "ClassB",
       "DisplayName": "区分",
       "Name": "Category",
@@ -73,6 +83,12 @@
     },
     {
       "EnumName": "案件状況",
+      "SearchCondition": {
+        "Condition": {
+          "Name": "",
+          "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.MultiMatchCondition"
+        }
+      },
       "DbColumn": "Status",
       "DisplayName": "状況",
       "Name": "Status",
@@ -85,8 +101,8 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     },
     {
-      "Format": "#,0",
       "DbColumn": "NumA",
+      "Format": "#,0",
       "DisplayName": "金額",
       "Name": "Amount",
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.NumberFieldDesign"
@@ -117,8 +133,8 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     },
     {
-      "IsMultiline": true,
       "DbColumn": "DescriptionA",
+      "IsMultiline": true,
       "DisplayName": "メモ",
       "Name": "Memo",
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.TextFieldDesign"
@@ -142,6 +158,7 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     },
     {
+      "DisplayName": "作業",
       "SearchCondition": {
         "ModuleName": "WorkTask",
         "Condition": {
@@ -150,7 +167,6 @@
               "Children": [
                 {
                   "SearchTargetVariable": "Project.Value",
-                  "Comparison": "Equal",
                   "Variable": "Id.Value",
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldVariableMatchCondition"
                 }
@@ -166,7 +182,6 @@
       "CanCreate": true,
       "CanUpdate": true,
       "CanDelete": true,
-      "DisplayName": "作業",
       "Name": "Tasks",
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
     },
@@ -369,8 +384,8 @@
               {
                 "Layout": {
                   "FieldName": "Created",
-                  "IsViewOnly": true,
                   "Name": "",
+                  "IsViewOnly": true,
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
                 }
               }

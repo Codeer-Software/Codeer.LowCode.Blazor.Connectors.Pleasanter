@@ -75,6 +75,12 @@
           "Nullable": true
         },
         {
+          "Name": "Comments",
+          "Kind": "String",
+          "ReadOnly": false,
+          "Nullable": true
+        },
+        {
           "Name": "ClassA",
           "Kind": "String",
           "ReadOnly": false,
@@ -204,6 +210,12 @@
           "Name": "UpdatedTime",
           "Kind": "DateTime",
           "ReadOnly": true,
+          "Nullable": true
+        },
+        {
+          "Name": "Comments",
+          "Kind": "String",
+          "ReadOnly": false,
           "Nullable": true
         },
         {
@@ -365,6 +377,12 @@
           "Name": "UpdatedTime",
           "Kind": "DateTime",
           "ReadOnly": true,
+          "Nullable": true
+        },
+        {
+          "Name": "Comments",
+          "Kind": "String",
+          "ReadOnly": false,
           "Nullable": true
         },
         {

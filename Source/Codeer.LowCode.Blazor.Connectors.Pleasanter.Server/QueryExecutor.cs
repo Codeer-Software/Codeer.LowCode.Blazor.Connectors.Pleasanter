@@ -433,7 +433,34 @@ namespace Codeer.LowCode.Blazor.Connectors.Pleasanter.Server
         {
             object? value = null;
             member.Rows.GetValueOrDefault(column.Alias)?.TryGetValue(column.Column, out value);
-            return value;
+            return column.Bucket == null ? value : Truncate(value, column.Bucket);
+        }
+
+        /// <summary>
+        /// PostgreSQL の date_trunc と同じ丸め (結果は日時。日付の列は 0:00 の日時として丸める)。週は月曜始まり。
+        /// 時差と年度の月のずれは PostgreSQL の interval と同じく足し引きする (月の加減で日が無ければその月の末日)。
+        /// </summary>
+        internal static DateTime? Truncate(object? value, DateBucketSpec bucket)
+        {
+            DateTime c;
+            switch (value)
+            {
+                case null: return null;
+                case DateTime dateTime: c = dateTime; break;
+                case DateOnly date: c = date.ToDateTime(TimeOnly.MinValue); break;
+                default: throw new PleasanterException($"A value of '{value.GetType().Name}' cannot be grouped by a period of a date.", PleasanterErrorKind.NotSupported);
+            }
+            c = c.AddMinutes(bucket.ShiftMinutes);
+            switch (bucket.Unit)
+            {
+                case "hour": return new DateTime(c.Year, c.Month, c.Day, c.Hour, 0, 0);
+                case "day": return c.Date;
+                case "week": return c.Date.AddDays(-(((int)c.DayOfWeek + 6) % 7));
+                case "month": return new DateTime(c.Year, c.Month, 1);
+            }
+            var s = c.AddMonths(-bucket.FiscalMonths);
+            var start = bucket.Unit == "quarter" ? new DateTime(s.Year, (s.Month - 1) / 3 * 3 + 1, 1) : new DateTime(s.Year, 1, 1);
+            return start.AddMonths(bucket.FiscalMonths);
         }
 
         static long Rank(AggregateRank rank, object? value)

@@ -217,6 +217,43 @@ namespace Codeer.LowCode.Blazor.Connectors.Pleasanter.Server
             using var _ = await SendAsync(SiteUrl(id, "delete"), null, false);
         }
 
+        /// <summary>
+        /// 拡張 SQL を API キーで実行する (POST api/extended/sql)。書き込みとして送る (やり直さない)。
+        /// 結果は最初の表の最初の行の列 (名前と値・応答の順)。行が無ければ null。
+        /// プリザンターは、拡張 SQL が無い・API から使えない (Api が true でない)・パラメータが足りない・SQL のエラーを、どれもエラー画面へのリダイレクトで返す。
+        /// </summary>
+        internal async Task<List<(string Name, object? Value)>?> ExecuteExtendedSqlAsync(string name, JsonObject parameters)
+        {
+            if (string.IsNullOrWhiteSpace(name)) throw new PleasanterException("The name of the extended SQL is empty.");
+            JsonDocument json;
+            try
+            {
+                json = await SendAsync(Settings.Url + "api/extended/sql", new JsonObject { ["Name"] = name, ["Params"] = parameters }, false);
+            }
+            catch (PleasanterException e) when (e.StatusCode is { } status && 300 <= (int)status && (int)status < 400)
+            {
+                throw new PleasanterException($"Pleasanter: the extended SQL '{name}' failed (HTTP {(int)status}). The extended SQL may not exist, may not be usable from the API (Api is not true), " +
+                    "may lack a parameter, or may have failed. Whether it was processed is unknown.", PleasanterErrorKind.WriteResultUnknown, status, null, e);
+            }
+            using (json)
+            {
+                if (!json.RootElement.TryGetProperty("Response", out var response) || response.ValueKind != JsonValueKind.Object ||
+                    !response.TryGetProperty("Data", out var data) || data.ValueKind != JsonValueKind.Object)
+                    return null;
+                foreach (var table in data.EnumerateObject())
+                {
+                    if (table.Value.ValueKind != JsonValueKind.Array) return null;
+                    foreach (var row in table.Value.EnumerateArray())
+                    {
+                        if (row.ValueKind != JsonValueKind.Object) return null;
+                        return row.EnumerateObject().Select(e => (e.Name, PleasanterValues.FromExtendedSqlValue(e.Value))).ToList();
+                    }
+                    return null;
+                }
+                return null;
+            }
+        }
+
         // ---------------------------------------------------------------- ブラウザのセッションの確認
 
         /// <summary>

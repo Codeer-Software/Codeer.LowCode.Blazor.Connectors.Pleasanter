@@ -133,6 +133,12 @@ namespace Codeer.LowCode.Blazor.Connectors.Pleasanter.Test.Live
             Assert.That(await CustomerKeysAsync(Value("Since.Value", MatchComparison.Equal, new DateOnly(2026, 1, 15))), Is.EquivalentTo(new[] { "c1", "c5" }));
             Assert.That(await CustomerKeysAsync(Value("Since.Value", MatchComparison.LessThan, new DateOnly(2026, 1, 15))), Is.EquivalentTo(new[] { "c6" }));
             Assert.That(await CustomerKeysAsync(Value("Since.Value", MatchComparison.Equal, null)), Is.EquivalentTo(new[] { "c4", "c7" }));
+            //c3 の登録日 (日付だけの列) は 3/10 15:45 (時刻の入った値)。読むと 3/10 で、条件も 3/10 の日として比べる
+            Assert.That(await CustomerKeysAsync(Value("Since.Value", MatchComparison.Equal, new DateOnly(2026, 3, 10))), Is.EquivalentTo(new[] { "c3" }));
+            Assert.That(await CustomerKeysAsync(Value("Since.Value", MatchComparison.LessThanOrEqual, new DateOnly(2026, 3, 10))), Is.EquivalentTo(new[] { "c1", "c2", "c3", "c5", "c6" }));
+            Assert.That(await CustomerKeysAsync(Value("Since.Value", MatchComparison.GreaterThan, new DateOnly(2026, 3, 10))), Is.EquivalentTo(new[] { "c8" }));
+            //条件の値の "Own" は文字の Own (プリザンターは利用者の ID に読み替えるので View に書かない)
+            Assert.That(await CustomerKeysAsync(Value("Person.Value", MatchComparison.Equal, "Own")), Is.EquivalentTo(new[] { "c1" }));
             Assert.That(await CustomerKeysAsync(Value("LastContact.Value", MatchComparison.Equal, new DateTime(2026, 11, 1, 9, 30, 15))), Is.EquivalentTo(new[] { "c1", "c8" }));
             Assert.That(await CustomerKeysAsync(Value("LastContact.Value", MatchComparison.GreaterThan, new DateTime(2026, 11, 1, 9, 30, 15))), Is.EquivalentTo(new[] { "c2", "c5" }));
             Assert.That(await CustomerKeysAsync(Value("Active.Value", MatchComparison.Equal, true)), Is.EquivalentTo(new[] { "c1", "c3", "c6", "c8" }));

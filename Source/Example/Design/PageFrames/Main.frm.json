@@ -57,7 +57,7 @@
       },
       {
         "Title": "ユーザー",
-        "Module": "AppUser"
+        "Module": "UserAdmin"
       }
     ],
     "Foreground": "#ffffff",

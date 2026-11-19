@@ -15,6 +15,12 @@ namespace LowCodeApp.Server.Sso
         /// </summary>
         public string DataSourceName { get; set; } = string.Empty;
 
+        /// <summary>
+        /// 入れるプリザンターのテナントの ID。本人のテナントがこれと違えば入れない (同じプリザンターの別のテナントの人を入れない)。
+        /// SSO を使うときは必須。未設定なら誰も入れない (設定の誤りとしてログに警告)。
+        /// </summary>
+        public int? TenantId { get; set; }
+
         /// <summary>ブラウザで開くプリザンターのログイン画面の URL (例: https://pleasanter.example.com/users/login)。ログイン待ち画面 (sso-login.html) が開く。</summary>
         public string LoginUrl { get; set; } = string.Empty;
 
@@ -24,6 +30,8 @@ namespace LowCodeApp.Server.Sso
         /// <summary>
         /// プリザンターで本人が確かめられたのにユーザーモジュールに行が無いとき、プリザンターのログイン ID をログイン名にして行を作るか。
         /// false なら事前に登録したユーザーだけが入れる (ユーザーモジュールの外部ログイン名の列にプリザンターのログイン ID を入れておく)。
+        /// 作れるのは、ログインアカウント契約の外部ログイン名がログイン名と同じ (または空) のユーザーモジュールだけ。
+        /// 別の列なら作った行を次のログインで引けないので、true でも作らない (未登録として扱う)。
         /// </summary>
         public bool AutoProvisionUser { get; set; }
 

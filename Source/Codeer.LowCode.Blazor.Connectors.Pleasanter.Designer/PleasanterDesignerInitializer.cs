@@ -45,9 +45,14 @@ namespace Codeer.LowCode.Blazor.Connectors.Pleasanter.Designer
 
         /// <summary>
         /// デザイナ用の IDbAccessor (IDbAccessorFactory の実装で使う)。プリザンター以外のデータソースは inner が受け持つ。
+        /// プリザンターの表の定義はプロジェクトのメタ情報のファイル (サーバー専用ファイル) から読む。プロジェクトを開いていなければプリザンターのサイトの設定を読む。
         /// </summary>
         public static IDbAccessor CreateDbAccessor(IDbAccessor inner, IEnumerable<DataSource> dataSources)
-            => new PleasanterDbAccessor(inner, PleasanterConnection.FromDataSources(dataSources), GetProjectDirectory());
+        {
+            var directory = GetProjectDirectory();
+            return new PleasanterDbAccessor(inner, PleasanterConnection.FromDataSources(dataSources),
+                string.IsNullOrEmpty(directory) ? null : PleasanterMetadataFile.FromProject(directory));
+        }
 
         static string? GetProjectDirectory()
         {

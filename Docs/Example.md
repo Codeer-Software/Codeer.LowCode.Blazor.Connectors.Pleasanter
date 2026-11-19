@@ -6,8 +6,8 @@
 | フォルダ | 内容 |
 |---|---|
 | `LowCodeApp.Server` / `LowCodeApp.Client` / `LowCodeApp.Client.Shared` | Web アプリ。コネクターの組み込みは `LowCodeApp.Server/Infrastructure/DataService.cs` の 2 行。SSO は `LowCodeApp.Server/Sso`・`Controllers/AccountController.cs`・`LowCodeApp.Client/wwwroot/index.html` と `sso-login.html` |
-| `Design` | サンプルのデザイン (取引先・案件・作業・取引先別の案件金額・ユーザー) |
-| `Data/main.sql` | ログインするユーザーの表と、最初のユーザー (admin / admin) |
+| `Design` | サンプルのデザイン (取引先・案件・作業・取引先別の案件金額・ユーザー・ユーザーの管理) |
+| `Data/main.sql` | ログインするユーザーの表と、最初のユーザー (admin / admin。管理者) |
 | `Data/setup-pleasanter.ps1` | プリザンターにサンプルのサイトとデータを作るスクリプト |
 | `Pleasanter/ExtendedSqls/ClbWhoAmI.json` | SSO のためにプリザンターに置く拡張 SQL |
 | `Tests/sso` | SSO の結合テスト (Playwright。実物のプリザンターにブラウザでログインする) |
@@ -70,7 +70,7 @@ Sites=Customers:215,Projects:216,Tasks:217
 }
 ```
 
-デザイナはプリザンターの表の定義を `Design/pleasanter.Pleasanter.metadata.json` から読みます (プリザンターには取りに行きません)。
+デザイナはプリザンターの表の定義を `Design/ServerFiles/pleasanter.Pleasanter.metadata.json` から読みます (プリザンターには取りに行きません)。
 このファイルはサンプルのサイトから書き出したものです。手順 1 でサイトを作り直した・サイト ID が違うとき・プリザンターで項目や選択肢を変えたときは、
 デザイナで Tools > プリザンターのメタ情報を更新 を実行してファイルを書き直します。このときは接続文字列の `ApiKey` に本物のキーが要ります (定義をファイルから読むだけなら要りません)。
 
@@ -83,6 +83,8 @@ Sites=Customers:215,Projects:216,Tasks:217
 ```
 LowCodeApp.Designer.exe sql Source/Example/Design --datasource Main --file Source/Example/Data/main.sql --out sql-result.json
 ```
+
+`app_users` の `is_admin` が 1 のユーザーだけがユーザーの管理を使えます。この列が無い前の版の `main.sql` で作った DB は、作り直すか列を足します (`hash` / `salt` の既定値 `''` も足すと、パスワードを持たないユーザーを画面から作れます)。
 
 ## 4. デザインを送る
 
@@ -110,12 +112,14 @@ dotnet run --project Source/Example/LowCodeApp.Server --launch-profile http
 
 1. 手順 1 の拡張 SQL を置きます
 2. ログインさせる人を、CLB のユーザー (`app_users`) に登録します。admin でログインして「ユーザー」の画面で行を作り、メールの欄 (外部ログイン名の列 `email`) にプリザンターのログイン ID を入れます。
-   登録の無い人がプリザンターでログインすると、待ち画面に「このアプリの利用者として登録されていません」と出ます。
-   登録の無い人を入れるときは `AutoProvisionUser` を `true` にします (プリザンターのログイン ID をログイン名にした行を作ります。外部ログイン名の列がログイン名の列と別の設計では作った行を引けないので、事前に登録します)
-3. `PleasanterSso` を設定してアプリを起動します (環境変数の例。手順 5 のプリザンターの接続文字列も渡します)
+   パスワードは空でかまいません (空のユーザーは ID / パスワードでは入れず、SSO だけで入ります)。
+   登録の無い人がプリザンターでログインすると、待ち画面に「このアプリの利用者として登録されていません」と出ます
+3. `PleasanterSso` を設定してアプリを起動します (環境変数の例。手順 5 のプリザンターの接続文字列も渡します)。
+   `TenantId` は入れるプリザンターのテナントの ID です (プリザンターの DB の `Tenants` 表で確かめます。手元のプリザンター 1.5.9.1 の最初のテナントは 1)
 
 ```
 $env:PleasanterSso__Enabled = "true"
+$env:PleasanterSso__TenantId = "1"
 $env:PleasanterSso__LoginUrl = "http://localhost:59803/users/login"
 $env:PleasanterSso__LogoutUrl = "http://localhost:59803/users/logout"
 dotnet run --project Source/Example/LowCodeApp.Server --launch-profile http
@@ -125,19 +129,22 @@ dotnet run --project Source/Example/LowCodeApp.Server --launch-profile http
 |---|---|
 | `Enabled` | SSO を使うか (既定 `false` = ID / パスワードのログイン画面) |
 | `DataSourceName` | 本人を問い合わせるプリザンターのデータソースの名前。問い合わせ先はその接続文字列の `Url`。空なら最初のプリザンターのデータソース |
+| `TenantId` | 入れるプリザンターのテナントの ID (必須)。別のテナントの人は入れません。未設定なら誰も SSO では入れません (ログに警告が出ます) |
 | `LoginUrl` | ブラウザで開くプリザンターのログイン画面の URL |
 | `LogoutUrl` | ブラウザで開くプリザンターのログアウトの URL。空なら待ち画面に「プリザンターからもログアウトする」を出さない |
-| `AutoProvisionUser` | 登録の無い人の行を作るか (既定 `false`) |
+| `AutoProvisionUser` | 登録の無い人の行を作るか (既定 `false`)。プリザンターのログイン ID をログイン名にした行を作ります。作れるのは、ユーザーモジュールのログインアカウント契約の外部ログイン名が空かログイン名と同じ設計だけです。このサンプルのように別の列 (`email`) の設計では `true` でも作らず、登録の無い人として扱います (作る行には外部ログイン名が入らず、次のログインで引けないため) |
 | `RevalidateSeconds` | CLB のセッションをプリザンターに確かめ直す間隔 (秒。既定 60) |
 | `TimeoutSeconds` | 本人の問い合わせのタイムアウト (秒。既定 5)。データの読み書きのタイムアウトは接続文字列の `TimeoutSeconds` |
 
 動き:
 
 - ログインしていないブラウザで CLB を開くと、CLB のサーバーがブラウザのプリザンターの Cookie をプリザンター (拡張 SQL `ClbWhoAmI`) に送って本人を確かめます。ログイン済みならそのまま入れます
+- 本人のテナントが `TenantId` と違う人は、登録の無い人と同じに待ち画面に「登録されていません」と出て入れません (監査ログは拒否 `tenant_mismatch`)
 - プリザンターでログインしていなければ、CLB の待ち画面 (`sso-login.html`) が出ます。「プリザンターでログイン」でプリザンターのログイン画面が別のタブで開き、ログインが済むと CLB に戻ります
 - 入ったあとも `RevalidateSeconds` ごとにプリザンターに確かめ直し、プリザンターでログアウトしていれば CLB からもサインアウトします (API は 401。プリザンターに届かないときは 503)
 - CLB のログアウトは CLB からだけ抜けて待ち画面に戻ります。プリザンターからも抜けるときは待ち画面の「プリザンターからもログアウトする」
 - ID / パスワードのログインも使えます (`/login.html` を開く。`AllowPasswordLogin` が `true` のとき)
+- ログインしていないブラウザの `api/account/current_user` は、テンプレートと同じく 200 と空の Id を返します (`index.html` は空の Id を未ログインとして扱います)
 
 条件:
 
@@ -154,7 +161,8 @@ dotnet run --project Source/Example/LowCodeApp.Server --launch-profile http
 | `Project` (案件) | `Projects` | 一覧 (受注日の降順・50 件ずつ)・検索 (案件名・取引先名・区分・状況・金額の範囲・受注日の範囲)・詳細。取引先は LinkField (選択のダイアログ)。状況はプリザンターでは数値の項目で、Enum `案件状況` (値が数字) の SelectField で名前を見せる。作成日時は表示だけ。詳細でその案件の作業を一覧で足す・直す・消す |
 | `WorkTask` (作業) | `Tasks` | 一覧 (10 件ずつ)・検索 (作業名・案件・担当者・開始の範囲)・詳細。期限付きテーブルの開始・完了・作業量・進捗率。残作業量はプリザンターが計算するので表示だけ |
 | `AmountByCustomer` (取引先別の案件金額) | — | 案件の金額を取引先 × 区分で合計するクロス集計 (CrossTabField とスクリプト)。プリザンターに集計の API は無いので、コネクターが案件を全部読んで集計します |
-| `AppUser` (ユーザー) | `app_users` (Main) | ログインするユーザー |
+| `AppUser` (ユーザー) | `app_users` (Main) | ログイン中のユーザー (`CurrentUser`) を読むモジュール。読めるのは自分の行だけ (行の読み取り条件 `Id = CurrentUser.Id`)。画面からは作成・更新・削除しない |
+| `UserAdmin` (ユーザーの管理) | `app_users` (Main) | サイドバーの「ユーザー」。ユーザーの一覧・作成・更新・削除・パスワードの設定。管理者 (`is_admin`) だけが読み書きでき、ほかの人にはサイドバーにも出ない |
 | `Home` | — | ログイン後の最初の画面 |
 
 - 取引先・案件・作業は UpdatedTime の楽観ロック付きです (画面を開いたあとにプリザンターで更新されると、保存が止まります)

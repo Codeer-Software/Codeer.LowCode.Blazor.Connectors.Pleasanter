@@ -28,9 +28,9 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     },
     {
-      "IsRequired": true,
       "DbColumn": "Title",
       "DisplayName": "会社名",
+      "IsRequired": true,
       "Name": "Name",
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.TextFieldDesign"
     },
@@ -42,6 +42,12 @@
     },
     {
       "EnumName": "業種",
+      "SearchCondition": {
+        "Condition": {
+          "Name": "",
+          "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.MultiMatchCondition"
+        }
+      },
       "DbColumn": "ClassA",
       "DisplayName": "業種",
       "Name": "Industry",
@@ -66,8 +72,8 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     },
     {
-      "IsMultiline": true,
       "DbColumn": "DescriptionA",
+      "IsMultiline": true,
       "DisplayName": "備考",
       "Name": "Note",
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.TextFieldDesign"
@@ -79,6 +85,8 @@
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
     },
     {
+      "CanNavigateToDetail": true,
+      "DisplayName": "案件",
       "SearchCondition": {
         "ModuleName": "Project",
         "Condition": {
@@ -87,7 +95,6 @@
               "Children": [
                 {
                   "SearchTargetVariable": "Customer.Value",
-                  "Comparison": "Equal",
                   "Variable": "Id.Value",
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.FieldVariableMatchCondition"
                 }
@@ -100,8 +107,6 @@
           "TypeFullName": "Codeer.LowCode.Blazor.Repository.Match.MultiMatchCondition"
         }
       },
-      "CanNavigateToDetail": true,
-      "DisplayName": "案件",
       "Name": "Projects",
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.ListFieldDesign"
     },

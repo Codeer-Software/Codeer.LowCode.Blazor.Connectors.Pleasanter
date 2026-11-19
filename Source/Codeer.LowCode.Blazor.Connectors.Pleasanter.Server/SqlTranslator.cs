@@ -241,6 +241,7 @@ namespace Codeer.LowCode.Blazor.Connectors.Pleasanter.Server
                 {
                     var q = 0;
                     var column = ReadColumn(item, ref q, scope, sql);
+                    RejectComments(column.Column);
                     var descending = false;
                     if (q < item.Count && (item[q].IsWord("desc") || item[q].IsWord("asc")))
                     {
@@ -383,6 +384,13 @@ namespace Codeer.LowCode.Blazor.Connectors.Pleasanter.Server
             var (owner, alias, column) = ReadColumnReference(tokens, ref p, scope, sql);
             if (owner != scope) throw NotSupported(sql);
             return (alias, column);
+        }
+
+        //コメントの列は読み書きだけ (条件・並び・集計には使えない)
+        static void RejectComments(string column)
+        {
+            if (column == PleasanterTableDefinition.CommentsColumn)
+                throw new PleasanterException("The Comments column of Pleasanter can only be read and written. It cannot be used in conditions, sorting or aggregation.");
         }
 
         static void CheckColumn(PleasanterTableDefinition definition, string column)
@@ -532,6 +540,7 @@ namespace Codeer.LowCode.Blazor.Connectors.Pleasanter.Server
                 if (token.IsWord("exists") && Peek(1)?.IsSymbol("(") == true) return await ParseExistsAsync();
 
                 var (owner, alias, column) = ReadColumnReference(_tokens, ref _p, _scope, _sql);
+                RejectComments(column);
                 var op = Next();
 
                 //列どうしの比較: 一覧をまたぐ条件の相関 (子の主表の列 = 外側の主表の列) だけ
@@ -811,7 +820,7 @@ namespace Codeer.LowCode.Blazor.Connectors.Pleasanter.Server
         /// と、グループの数を数える select count(*) from (select 1 as "x" from ... group by ... having ...) x。
         /// 行を選ぶ定義 (WithinGroupsOf) は、結合の最後の inner join (同じ表の集計) 別名 on (列 = 別名."gN" or (列 is null and 別名."gN" is null)) and ... [on 1=1]。
         /// その集計の行数を数える select count(*) from ... inner join (...) ... where ... も受け付ける (別名なしの count(*) 1 つ)。
-        /// 日付の丸め (date_trunc など) は拒否する。
+        /// 軸は列か日付の丸め (<see cref="ReadGroupKey"/>)。
         /// </summary>
         internal static async Task<AggregatePlan> TranslateAggregateAsync(string sql, IReadOnlyDictionary<string, object?> args, Func<string, Task<PleasanterTableDefinition>> getDefinition)
         {
@@ -1017,12 +1026,12 @@ namespace Codeer.LowCode.Blazor.Connectors.Pleasanter.Server
                     if (t.Count <= p || !t[p].IsIdentifier) throw NotSupported(sql);
                     return t[p++].Text;
                 }
-                var outer = ReadColumn(t, ref p, scope, sql);
+                var outer = ReadGroupKey(t, ref p, scope, sql);
                 Expect(e => e.IsSymbol("="));
                 var innerAlias = Inner();
                 Expect(e => e.IsWord("or"));
                 Expect(e => e.IsSymbol("("));
-                if (ReadColumn(t, ref p, scope, sql) != outer) throw NotSupported(sql);
+                if (ReadGroupKey(t, ref p, scope, sql) != outer) throw NotSupported(sql);
                 Expect(e => e.IsWord("is"));
                 Expect(e => e.IsWord("null"));
                 Expect(e => e.IsWord("and"));
@@ -1033,7 +1042,7 @@ namespace Codeer.LowCode.Blazor.Connectors.Pleasanter.Server
                 if (p != t.Count) throw NotSupported(sql);
                 //選ぶ集計の軸の列だけと突き合わせる
                 if (!plan.Items.Any(e => e.Alias == innerAlias && e.Expression is AggregateColumn)) throw NotSupported(sql);
-                within.On.Add((new AggregateColumn(outer.Alias, outer.Column), innerAlias));
+                within.On.Add((outer, innerAlias));
             }
             return within;
         }
@@ -1072,22 +1081,102 @@ namespace Codeer.LowCode.Blazor.Connectors.Pleasanter.Server
             return parts;
         }
 
-        static readonly string[] DateFunctions = { "date_trunc", "to_char", "interval", "extract", "date_part", "make_date" };
+        /// <summary>
+        /// 軸の式: 列か、本体の日付の軸 (AggregateSqlCreator の PostgreSQL の丸め) の式。受け付ける形は
+        /// date_trunc('hour' | 'day' | 'week' | 'month', C) と (date_trunc('quarter' | 'year', S)[ + interval 'F months'])。
+        /// C は 列 か (列 + interval 'N minutes')、S は C か (C - interval 'F months')。
+        /// </summary>
+        static AggregateColumn ReadGroupKey(List<SqlToken> t, ref int p, Scope scope, string sql)
+        {
+            bool At(int i, Func<SqlToken, bool> predicate) => i < t.Count && predicate(t[i]);
+            var wrapped = At(p, e => e.IsSymbol("(")) && At(p + 1, e => e.IsWord("date_trunc"));
+            if (!wrapped && !At(p, e => e.IsWord("date_trunc")))
+            {
+                var (alias, column) = ReadColumn(t, ref p, scope, sql);
+                RejectComments(column);
+                return new AggregateColumn(alias, column);
+            }
+            var q = p;
+            void Expect(Func<SqlToken, bool> predicate)
+            {
+                if (!At(q, predicate)) throw NotSupported(sql);
+                q++;
+            }
+            //interval 'N 単位' の N
+            int Interval(string unit)
+            {
+                Expect(e => e.IsWord("interval"));
+                if (!At(q, e => e.Kind == SqlTokenKind.StringLiteral)) throw NotSupported(sql);
+                var parts = t[q++].Text.Split(' ');
+                if (parts.Length != 2 || parts[1] != unit || !int.TryParse(parts[0], NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out var n)) throw NotSupported(sql);
+                return n;
+            }
 
-        /// <summary>日付を期間に丸める軸 (本体の日付の軸) の拒否。プリザンターの API には集計も日付の式も無い。</summary>
-        static PleasanterException DateBucketNotSupported()
-            => new("Grouping by a period of a date (day / week / month / quarter / year) is not supported for a Pleasanter data source. " +
-                   "Add a column for the period (for example the year and month as text) to the Pleasanter site and group by that column.");
+            if (wrapped) q++;
+            Expect(e => e.IsWord("date_trunc"));
+            Expect(e => e.IsSymbol("("));
+            if (!At(q, e => e.Kind == SqlTokenKind.StringLiteral)) throw NotSupported(sql);
+            var unit = t[q++].Text.ToLowerInvariant();
+            Expect(e => e.IsSymbol(","));
+
+            //S = C か (C - interval 'F months')、C = 列 か (列 + interval 'N minutes')
+            var shift = 0;
+            var fiscal = 0;
+            var opens = 0;
+            while (At(q, e => e.IsSymbol("("))) { q++; opens++; }
+            if (opens > 2) throw NotSupported(sql);
+            var (columnAlias, columnName) = ReadColumn(t, ref q, scope, sql);
+            for (var i = 0; i < opens; i++)
+            {
+                if (At(q, e => e.IsSymbol("+")) && i == 0)
+                {
+                    q++;
+                    shift = Interval("minutes");
+                }
+                else if (At(q, e => e.IsSymbol("-")))
+                {
+                    q++;
+                    fiscal = Interval("months");
+                    if (i != opens - 1) throw NotSupported(sql);
+                }
+                else throw NotSupported(sql);
+                Expect(e => e.IsSymbol(")"));
+            }
+            Expect(e => e.IsSymbol(")"));
+
+            if (unit is "hour" or "day" or "week" or "month")
+            {
+                if (wrapped || fiscal != 0) throw NotSupported(sql);
+            }
+            else if (unit is "quarter" or "year")
+            {
+                if (!wrapped) throw NotSupported(sql);
+                var back = 0;
+                if (At(q, e => e.IsSymbol("+")))
+                {
+                    q++;
+                    back = Interval("months");
+                }
+                if (back != fiscal || fiscal is < 0 or > 11) throw NotSupported(sql);
+                Expect(e => e.IsSymbol(")"));
+            }
+            else throw NotSupported(sql);
+            p = q;
+            return new AggregateColumn(columnAlias, columnName, new DateBucketSpec(unit, shift, fiscal));
+        }
 
         static AggregateExpression ParseAggregateExpression(List<SqlToken> tokens, Scope scope, string sql)
         {
-            if (tokens.Any(e => e.Kind == SqlTokenKind.Word && DateFunctions.Any(f => e.IsWord(f)))) throw DateBucketNotSupported();
             if (tokens.Count == 1 && tokens[0].Kind == SqlTokenKind.Number && tokens[0].Text == "1") return new AggregateConstant();
 
             var p = 0;
-            AggregateColumn Column()
+            //軸 (日付の丸めを含む)
+            AggregateColumn Column() => ReadGroupKey(tokens, ref p, scope, sql);
+            //集計する列 (丸めない)
+            AggregateColumn Measured()
             {
                 var (alias, column) = ReadColumn(tokens, ref p, scope, sql);
+                RejectComments(column);
                 return new AggregateColumn(alias, column);
             }
             void Expect(Func<SqlToken, bool> predicate)
@@ -1136,7 +1225,7 @@ namespace Codeer.LowCode.Blazor.Connectors.Pleasanter.Server
                     return Done(new AggregateRank(column, codes, otherwise));
                 }
             }
-            if (tokens.Count >= 4 && tokens[0].Kind == SqlTokenKind.Word && tokens[1].IsSymbol("("))
+            if (tokens.Count >= 4 && tokens[0].Kind == SqlTokenKind.Word && tokens[1].IsSymbol("(") && !tokens[0].IsWord("date_trunc"))
             {
                 var function = tokens[0].Text.ToLowerInvariant();
                 p = 2;
@@ -1149,11 +1238,11 @@ namespace Codeer.LowCode.Blazor.Connectors.Pleasanter.Server
                 else if (function == "count" && tokens[2].IsWord("distinct"))
                 {
                     p = 3;
-                    call = new AggregateFunctionCall("countdistinct", Column());
+                    call = new AggregateFunctionCall("countdistinct", Measured());
                 }
                 else if (function is "sum" or "avg" or "min" or "max")
                 {
-                    call = new AggregateFunctionCall(function, Column());
+                    call = new AggregateFunctionCall(function, Measured());
                 }
                 else
                 {

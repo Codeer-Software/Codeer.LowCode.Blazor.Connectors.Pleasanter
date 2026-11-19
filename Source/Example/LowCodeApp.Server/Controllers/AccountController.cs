@@ -12,6 +12,7 @@ using Codeer.LowCode.Blazor.Extras.Server.Mail;
 using Microsoft.Extensions.Caching.Distributed;
 using LowCodeApp.Server.Sso;
 using Codeer.LowCode.Blazor.Connectors.Pleasanter.Server;
+using Codeer.LowCode.Blazor.Extras.Designs;
 
 namespace LowCodeApp.Server.Controllers
 {
@@ -76,7 +77,7 @@ namespace LowCodeApp.Server.Controllers
 
         //ログイン待ち画面 (sso-login.html) と index.html が呼ぶ。プリザンターでログイン済みなら CLB の Cookie を発行して Authenticated = true を返す
         //(プリザンターのログイン画面は別のオリジンへ戻れないので、CLB の側で待つ)。
-        //プリザンターでは確かめられたがユーザーモジュールに登録が無いときは NotRegistered = true (待ち画面は確かめるのをやめて知らせる)
+        //プリザンターでは確かめられたがユーザーモジュールに登録が無い・別のテナントの人のときは NotRegistered = true (待ち画面は確かめるのをやめて知らせる)
         //待ち画面が繰り返し呼ぶので監査ログの分類は付けない (まだログインしていない結果は記録されない)。
         //プリザンターで本人が確かめられたときだけ TrySsoSignInAsync が認証の分類にする (ログインの成否が記録される)
         [HttpGet("sso/check")]
@@ -99,6 +100,13 @@ namespace LowCodeApp.Server.Controllers
             await _audit.StartAsync(AuditCategory.Authentication, _audit.Event.Action);
             _audit.Event.Detail = $"Provider={PleasanterSso.Provider}; LoginId={identity.LoginId}";
 
+            //別のテナントの人は入れない (待ち画面には未登録と同じに出す)
+            if (!PleasanterSso.IsAllowedTenant(identity))
+            {
+                _audit.Deny($"Provider={PleasanterSso.Provider}; LoginId={identity.LoginId}; TenantId={identity.TenantId}; tenant_mismatch");
+                return SsoSignInResult.NotRegistered;
+            }
+
             var account = await FindSsoAccountAsync(identity);
             if (account == null)
             {
@@ -112,6 +120,7 @@ namespace LowCodeApp.Server.Controllers
 
         //プリザンターのログイン ID を、ユーザーモジュールの外部ログイン名の列 (LoginAccountContractField の ExternalLoginName。空ならログイン名の列) で引く。
         //無くて AutoProvisionUser なら、ログイン ID をログイン名にして行を作る (パスワードは誰も知らない値。ID / パスワードのログインには使えない)。
+        //作る行に入るのはログイン名の列だけなので、外部ログイン名がログイン名と別の列の設計では作らない (作った行は外部ログイン名が空で、このログインでも次のログインでも引けない)。
         //同じログイン名の行が既にあれば作らない (別の人の行に入らないように)
         async Task<LoginAccount?> FindSsoAccountAsync(PleasanterIdentity identity)
         {
@@ -119,15 +128,23 @@ namespace LowCodeApp.Server.Controllers
             if (accounts == null) return null;
             var account = await accounts.FindByExternalLoginNameAsync(identity.LoginId);
             if (account != null || !PleasanterSso.Settings.AutoProvisionUser || !accounts.HasPassword) return account;
+            if (!ExternalLoginNameIsLoginName()) return null;
             if (await accounts.FindByLoginNameAsync(identity.LoginId) != null) return null;
             await accounts.AddAsync(identity.LoginId, Guid.NewGuid().ToString("N") + Guid.NewGuid().ToString("N"));
-            //外部ログイン名の列がログイン名の列と別なら、作った行はこれでは引けない (その設計では事前登録にする)
             return await accounts.FindByExternalLoginNameAsync(identity.LoginId);
         }
 
-        //CLB の中のパスだけ (別のサイトへ飛ばさない)
-        static string LocalReturnUrl(string? url)
-            => string.IsNullOrEmpty(url) || !url.StartsWith('/') || url.StartsWith("//") || url.StartsWith("/\\") ? "/" : url;
+        //ユーザーモジュールのログインアカウント契約で、外部ログイン名がログイン名と同じフィールド (または空 = ログイン名の列で引く) か
+        bool ExternalLoginNameIsLoginName()
+        {
+            var design = _dataService.Design.DesignData;
+            var contract = design.Modules.Find(design.AppSettings.CurrentUserModuleDesignName)?.Fields.OfType<LoginAccountContractFieldDesign>().FirstOrDefault();
+            return contract != null && (string.IsNullOrEmpty(contract.ExternalLoginName) || contract.ExternalLoginName == contract.LoginName);
+        }
+
+        //CLB の中のパスだけ (別のサイトへ飛ばさない。"//"・"/\"・タブや改行入りなど、ブラウザが別のサイトと解釈する値は IsLocalUrl が弾く)
+        string LocalReturnUrl(string? url)
+            => !string.IsNullOrEmpty(url) && Url.IsLocalUrl(url) ? url : "/";
 
         [HttpPost("login"), Audit(AuditCategory.Authentication)]
         public async Task<IActionResult> Login(LoginInfo? loginInfo)

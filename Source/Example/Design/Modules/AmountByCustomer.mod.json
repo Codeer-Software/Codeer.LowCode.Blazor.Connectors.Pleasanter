@@ -16,6 +16,16 @@
       "DisplayName": "取引先 × 区分 (金額)",
       "Name": "Amounts",
       "TypeFullName": "Codeer.LowCode.Blazor.Extras.Designs.CrossTabFieldDesign"
+    },
+    {
+      "Text": "受注日の月 × 区分 で合計します。",
+      "Name": "MonthlyDescription",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
+    },
+    {
+      "DisplayName": "受注月 × 区分 (金額)",
+      "Name": "MonthlyAmounts",
+      "TypeFullName": "Codeer.LowCode.Blazor.Extras.Designs.CrossTabFieldDesign"
     }
   ],
   "DetailLayouts": {
@@ -58,6 +68,28 @@
               {
                 "Layout": {
                   "FieldName": "Amounts",
+                  "Name": "",
+                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
+                }
+              }
+            ]
+          },
+          {
+            "Columns": [
+              {
+                "Layout": {
+                  "FieldName": "MonthlyDescription",
+                  "Name": "",
+                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
+                }
+              }
+            ]
+          },
+          {
+            "Columns": [
+              {
+                "Layout": {
+                  "FieldName": "MonthlyAmounts",
                   "Name": "",
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
                 }

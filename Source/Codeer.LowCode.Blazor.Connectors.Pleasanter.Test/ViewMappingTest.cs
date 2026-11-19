@@ -93,7 +93,7 @@ namespace Codeer.LowCode.Blazor.Connectors.Pleasanter.Test
             Assert.That(filter.Keys, Is.EquivalentTo(new[] { "and_1", "and_2" }));
             //and_n の値は入れ子の JSON の文字 ({"列":"値の並びの JSON"})
             var leaves = filter.Values.Select(e => JsonNode.Parse(e)!.AsObject().Single()).ToDictionary(e => e.Key, e => e.Value!.GetValue<string>());
-            Assert.That(leaves, Is.EqualTo(new Dictionary<string, string> { ["NumA"] = "[\"5.5,\"]", ["DateA"] = "[\",2026-02-01T00:00:00\"]" }));
+            Assert.That(leaves, Is.EqualTo(new Dictionary<string, string> { ["NumA"] = "[\"5.5,\"]", ["DateA"] = "[\",2026-02-01T23:59:59\"]" }));
         }
 
         [Test]
@@ -253,6 +253,7 @@ namespace Codeer.LowCode.Blazor.Connectors.Pleasanter.Test
 
         [Test]
         public void SQLの直接実行はできない()
-            => Assert.ThrowsAsync<PleasanterException>(() => _h.Accessor.ExecuteSqlCommandAsync(TestDesign.DataSourceName, new DbSqlCommand { CommandText = "delete from \"Customers\"" }));
+            => Assert.That(Assert.ThrowsAsync<PleasanterException>(() => _h.Accessor.ExecuteSqlCommandAsync(TestDesign.DataSourceName, new DbSqlCommand { CommandText = "delete from \"Customers\"" }))!.Message,
+                Does.Contain("StoredProcedure"));
     }
 }
