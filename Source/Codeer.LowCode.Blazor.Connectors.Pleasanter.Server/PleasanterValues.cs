@@ -194,6 +194,11 @@ namespace Codeer.LowCode.Blazor.Connectors.Pleasanter.Server
                 case PleasanterColumnKind.Bool:
                     if (element.ValueKind is JsonValueKind.True or JsonValueKind.False) return element.GetBoolean();
                     break;
+                case PleasanterColumnKind.Attachments:
+                    //ファイルの並び (AttachmentsHash の 1 列分) をそのまま JSON の文字で返す。ファイルが無ければ "[]"
+                    if (element.ValueKind == JsonValueKind.Array) return element.GetRawText();
+                    if (text != null) return text;
+                    break;
             }
             var raw = text ?? element.GetRawText();
             if (100 < raw.Length) raw = raw[..100] + "...";
@@ -202,6 +207,7 @@ namespace Codeer.LowCode.Blazor.Connectors.Pleasanter.Server
                 PleasanterColumnKind.Number => "a number",
                 PleasanterColumnKind.Date or PleasanterColumnKind.DateTime => "a date (yyyy-MM-ddTHH:mm:ss)",
                 PleasanterColumnKind.Bool => "true or false",
+                PleasanterColumnKind.Attachments => "a list of files",
                 _ => "text",
             };
             throw new PleasanterException($"Pleasanter returned a value that cannot be read as {expected} (table '{table}', column '{column.Name}'): '{raw}'.", PleasanterErrorKind.Unknown);

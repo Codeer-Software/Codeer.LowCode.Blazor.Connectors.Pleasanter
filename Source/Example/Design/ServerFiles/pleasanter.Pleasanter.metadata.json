@@ -272,6 +272,13 @@
           "ReadOnly": false,
           "Nullable": true,
           "LabelText": "メモ"
+        },
+        {
+          "Name": "AttachmentsA",
+          "Kind": "Attachments",
+          "ReadOnly": false,
+          "Nullable": true,
+          "LabelText": "資料"
         }
       ]
     },

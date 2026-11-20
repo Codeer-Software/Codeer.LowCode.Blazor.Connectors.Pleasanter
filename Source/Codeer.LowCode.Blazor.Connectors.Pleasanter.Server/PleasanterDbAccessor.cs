@@ -1,6 +1,11 @@
+using Codeer.LowCode.Blazor.DataIO;
 using Codeer.LowCode.Blazor.DataIO.Db;
 using Codeer.LowCode.Blazor.DataIO.Db.Definition;
+using Codeer.LowCode.Blazor.DesignLogic;
+using Codeer.LowCode.Blazor.Repository;
+using Codeer.LowCode.Blazor.Repository.Data;
 using Codeer.LowCode.Blazor.Repository.Design;
+using Codeer.LowCode.Blazor.Repository.Match;
 using Codeer.LowCode.Blazor.SystemSettings;
 using System.Data;
 using System.Data.Common;
@@ -176,9 +181,21 @@ namespace Codeer.LowCode.Blazor.Connectors.Pleasanter.Server
             {
                 var update = SqlTranslator.ParseUpdate(query);
                 var definition = await GetWritableDefinitionAsync(connection, update);
-                var body = CreateBody(connection, definition, update.Values, args, false);
+                var body = CreateBody(connection, definition, update.Values, args, false, out var attachments);
                 var id = GetId(definition, update, args);
-                if (!await ExistsAsync(connection, update, args)) return 0;
+                if (attachments.Any(e => e.Value.Deletions.Count != 0))
+                {
+                    //消す添付は、このレコードのその列に今あるものだけ送る (プリザンターは別のレコードの添付の Guid でも消してしまう)
+                    var stored = await ReadStoredAttachmentsAsync(connection, update, args, attachments.Where(e => e.Value.Deletions.Count != 0).Select(e => e.Key).ToList());
+                    if (stored == null) return 0;
+                    foreach (var (column, change) in attachments)
+                    {
+                        if (!stored.TryGetValue(column, out var guids)) continue;
+                        change.Deletions.RemoveAll(e => !guids.Contains(e, StringComparer.OrdinalIgnoreCase));
+                    }
+                }
+                else if (!await ExistsAsync(connection, update, args)) return 0;
+                AddAttachments(body, attachments);
                 if (body.Count != 0) await connection.UpdateAsync(id, body);
                 return 1;
             }
@@ -217,7 +234,10 @@ namespace Codeer.LowCode.Blazor.Connectors.Pleasanter.Server
         {
             var definition = await GetDefinitionAsync(connection, insert.Table);
             if (!string.IsNullOrEmpty(insert.ReturningColumn) && insert.ReturningColumn != definition.KeyColumn) throw IdNotKey(definition);
-            var body = CreateBody(connection, definition, insert.Columns.Zip(parameters).ToList(), args, true);
+            var body = CreateBody(connection, definition, insert.Columns.Zip(parameters).ToList(), args, true, out var attachments);
+            //作成では消す添付は無い (足すものだけ送る)
+            foreach (var change in attachments.Values) change.Deletions.Clear();
+            AddAttachments(body, attachments);
             var id = await connection.CreateAsync(definition, body);
             return id.ToString(CultureInfo.InvariantCulture);
         }
@@ -250,24 +270,58 @@ namespace Codeer.LowCode.Blazor.Connectors.Pleasanter.Server
             return count != null && 0 < Convert.ToDecimal(count, CultureInfo.InvariantCulture);
         }
 
+        //ExistsAsync と同じ条件で行を読み、添付の列に今あるファイルの Guid を返す。行が無ければ null
+        async Task<Dictionary<string, List<string>>?> ReadStoredAttachmentsAsync(PleasanterConnection connection, WritePlan write, Dictionary<string, object?> args, List<string> columns)
+        {
+            var select = string.Join(", ", columns.Select(e => $"\"{e}\""));
+            var rows = await QueryCoreAsync(connection, $"select {select} from \"{write.Table}\" where {write.WhereSql}", args);
+            var row = rows.FirstOrDefault();
+            if (row == null) return null;
+            return columns.ToDictionary(e => e, e => PleasanterAttachments.ReadGuids(row.TryGetValue(e, out var value) ? value as string : null));
+        }
+
+        //添付の変更を本文の AttachmentsHash に入れる (足すものも消すものも無い列は送らない)
+        static void AddAttachments(JsonObject body, Dictionary<string, PleasanterAttachments.Change> attachments)
+        {
+            foreach (var (column, change) in attachments)
+            {
+                if (change.IsEmpty) continue;
+                if (body["AttachmentsHash"] is not JsonObject hash)
+                {
+                    hash = new JsonObject();
+                    body["AttachmentsHash"] = hash;
+                }
+                hash[column] = PleasanterAttachments.ToRequest(change.Additions, change.Deletions);
+            }
+        }
+
         /// <summary>
-        /// 要求の本文 (標準の列はそのまま、拡張の列は ClassHash などの中)。読み取り専用の列は、作成で値が null なら送らず、値があればエラー。更新の対象に入っていればエラー。
+        /// 要求の本文 (標準の列はそのまま、拡張の列は ClassHash などの中)。読み取り専用の列は、作成ではキー以外は値があっても送らず、キーに値があればエラー。更新の対象に入っていればエラー。
         /// 作成では値が null の列は送らない (プリザンターの既定値になる)。
         /// 更新で値が null の列は、プリザンターが空として受け付ける値を送る (null を送ると無視される・400 になる列があるため):
         /// 文字 → ""・数値 → null (null を持てない数値の列は 0 になる)・日付 → 空の日付 (EmptyDate)・チェック → false・Status / Manager / Owner など null を持てない標準の数値 → 0。
+        /// 添付の列は本文に入れず attachments に分ける (消すものは送る前にレコードの今の値で絞るため)。
         /// </summary>
         static JsonObject CreateBody(PleasanterConnection connection, PleasanterTableDefinition definition, IEnumerable<(string Column, string Parameter)> values,
-            Dictionary<string, object?> args, bool isInsert)
+            Dictionary<string, object?> args, bool isInsert, out Dictionary<string, PleasanterAttachments.Change> attachments)
         {
             var body = new JsonObject();
+            attachments = new Dictionary<string, PleasanterAttachments.Change>(StringComparer.Ordinal);
             foreach (var (name, parameter) in values)
             {
                 var column = definition.FindColumn(name) ?? throw new PleasanterException($"Table '{definition.Name}' has no column '{name}'.");
                 if (!args.TryGetValue(parameter, out var value)) throw new PleasanterException($"The value of parameter '{parameter}' is missing.");
                 if (value is DBNull) value = null;
+                if (column.Kind == PleasanterColumnKind.Attachments)
+                {
+                    attachments[column.Name] = PleasanterAttachments.ParseChange(definition.Name, column.Name, value);
+                    continue;
+                }
                 if (column.IsReadOnly)
                 {
-                    if (isInsert && value == null) continue;
+                    //作成では、プリザンターが自分で決める列 (版・作成者・更新者・作成日時・更新日時・残作業量) の値は送らない
+                    //(レコードのコピーは、これらを表示しているフィールドの値も写して作成に乗せる)。キーの指定だけはエラー
+                    if (isInsert && (value == null || !string.Equals(column.Name, definition.KeyColumn, StringComparison.Ordinal))) continue;
                     throw new PleasanterException($"Column '{name}' of Pleasanter table '{definition.Name}' is read-only (id, version, creator, updater, created / updated time or remaining work value) and cannot be written.");
                 }
                 if (isInsert && value == null) continue;
@@ -313,6 +367,66 @@ namespace Codeer.LowCode.Blazor.Connectors.Pleasanter.Server
                 bool b => JsonValue.Create(b),
                 _ => JsonValue.Create((string)converted),
             };
+        }
+
+        // ---------------------------------------------------------------- 添付のダウンロード
+
+        /// <summary>添付のフィールド (クライアント用パッケージの PleasanterAttachmentsFieldDesign) の型の名前。このパッケージはクライアント用パッケージを参照しないので名前で見る。</summary>
+        internal const string AttachmentsFieldDesignTypeFullName = "Codeer.LowCode.Blazor.Connectors.Pleasanter.PleasanterAttachmentsFieldDesign";
+
+        /// <summary>
+        /// 添付のフィールドのファイル 1 つの中身を、現在の利用者の権限で読む (ホストのダウンロードの Controller から呼ぶ)。
+        /// 手順: モジュールがこのアクセサのプリザンターのデータソースで、フィールドが添付のフィールド (添付の列) であることを確かめる →
+        /// io の通常の読み出し (モジュール・行・フィールドの権限が効く) でそのレコードのそのフィールドを読む → その値に guid のファイルがあることを確かめる →
+        /// プリザンターから中身を読む (そのレコードの添付であることも確かめる)。
+        /// どれかが満たせなければ null (理由は区別しない。失敗でも例外を投げない)。
+        /// 連携用の API キーはテナント内のどの添付も読めるので、guid だけで中身を返す口をホストに作らない。
+        /// </summary>
+        /// <param name="io">現在の利用者の ModuleDataIO。</param>
+        /// <param name="designData">io と同じデザイン。</param>
+        public async Task<PleasanterAttachmentFile?> GetAttachmentAsync(ModuleDataIO io, DesignData designData, string? moduleName, string? id, string? fieldName, string? guid)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(moduleName) || string.IsNullOrEmpty(fieldName) || !PleasanterAttachments.IsGuid(guid)) return null;
+                if (!long.TryParse(id, NumberStyles.None, CultureInfo.InvariantCulture, out var recordId) || recordId <= 0) return null;
+
+                var module = designData.Modules.Find(moduleName);
+                if (module == null || string.IsNullOrEmpty(module.DataSourceName)) return null;
+                var connection = Find(module.DataSourceName);
+                if (connection == null) return null;
+                var field = module.Fields.FirstOrDefault(e => e.Name == fieldName);
+                if (field?.TypeFullName != AttachmentsFieldDesignTypeFullName) return null;
+                //型は名前で見たので、列の名前は公開のプロパティから読む
+                if (field.GetType().GetProperty("DbColumn")?.GetValue(field) is not string dbColumn) return null;
+                var definition = await GetDefinitionAsync(connection, module.DbTable);
+                if (definition.FindColumn(dbColumn)?.Kind != PleasanterColumnKind.Attachments) return null;
+                var idField = module.Fields.OfType<IdFieldDesign>().FirstOrDefault();
+                if (idField == null || idField.DbColumn != definition.KeyColumn) return null;
+
+                var condition = new SearchCondition(moduleName)
+                {
+                    Condition = MultiMatchCondition.And(new FieldValueMatchCondition
+                    {
+                        SearchTargetVariable = idField.Name + ".Value",
+                        Comparison = MatchComparison.Equal,
+                        Value = MultiTypeValue.Create(recordId.ToString(CultureInfo.InvariantCulture)),
+                    }),
+                };
+                condition.SelectFields.Add(fieldName);
+                var rows = (await io.GetListAsync(condition, 0)).Items;
+                if (rows.Count != 1 || !rows[0].Fields.TryGetValue(fieldName, out var data) || data is not ValueFieldDataBase<string> value) return null;
+                var file = PleasanterAttachments.ReadFiles(value.Value).FirstOrDefault(e => string.Equals(e.Guid, guid, StringComparison.OrdinalIgnoreCase));
+                if (file.Guid == null) return null;
+
+                var binary = await connection.GetBinaryAsync(file.Guid);
+                if (binary.ReferenceId != recordId) return null;
+                return new PleasanterAttachmentFile(string.IsNullOrEmpty(file.Name) ? binary.FileName : file.Name, binary.Content);
+            }
+            catch (Exception)
+            {
+                return null;
+            }
         }
 
         //秒まで (プリザンターは秒より細かい値を返さない)

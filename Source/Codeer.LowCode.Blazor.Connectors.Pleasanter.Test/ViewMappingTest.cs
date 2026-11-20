@@ -244,6 +244,51 @@ namespace Codeer.LowCode.Blazor.Connectors.Pleasanter.Test
             Assert.That(body["CheckHash"]!["CheckA"]!.GetValue<bool>(), Is.True);
         }
 
+        [Test]
+        public async Task 作成ではキー以外の読み取り専用の列に値があっても送らない()
+        {
+            //レコードのコピーは作成日時などを表示しているフィールドの値も写して作成に乗せる。プリザンターが自分で決める列なので送らない
+            await _h.Accessor.InsertAsync(TestDesign.DataSourceName,
+                "insert into \"Customers\"(\"Title\",\"Ver\",\"Creator\",\"Updator\",\"CreatedTime\",\"UpdatedTime\") values(@p0,@p1,@p2,@p3,@p4,@p5) returning \"ResultId\"",
+                new() { ["@p0"] = "コピー", ["@p1"] = 3m, ["@p2"] = 7m, ["@p3"] = 8m, ["@p4"] = new DateTime(2020, 1, 2, 3, 4, 5), ["@p5"] = new DateTime(2021, 1, 2, 3, 4, 5) });
+            await _h.Accessor.InsertAsync(TestDesign.DataSourceName,
+                "insert into \"Tasks\"(\"Title\",\"WorkValue\",\"ProgressRate\",\"RemainingWorkValue\") values(@p0,@p1,@p2,@p3) returning \"IssueId\"",
+                new() { ["@p0"] = "コピー", ["@p1"] = 10m, ["@p2"] = 20m, ["@p3"] = 99m });
+
+            var bodies = _h.Fake.WriteRequests.Select(e => e.Json).ToList();
+            Assert.That(bodies, Has.Count.EqualTo(2));
+            Assert.That(bodies[0]["Title"]!.GetValue<string>(), Is.EqualTo("コピー"));
+            foreach (var name in new[] { "Ver", "Creator", "Updator", "CreatedTime", "UpdatedTime" }) Assert.That(bodies[0].ContainsKey(name), Is.False, name);
+            Assert.That(bodies[1]["WorkValue"]!.GetValue<decimal>(), Is.EqualTo(10m));
+            Assert.That(bodies[1].ContainsKey("RemainingWorkValue"), Is.False);
+        }
+
+        [TestCase("Customers", "ResultId")]
+        [TestCase("Tasks", "IssueId")]
+        public void 作成でキーに値があればエラー(string table, string key)
+        {
+            var e = Assert.ThrowsAsync<PleasanterException>(() => _h.Accessor.InsertAsync(TestDesign.DataSourceName,
+                $"insert into \"{table}\"(\"Title\",\"{key}\") values(@p0,@p1) returning \"{key}\"", new() { ["@p0"] = "x", ["@p1"] = 5L }))!;
+            Assert.That(e.Message, Does.Contain("read-only"));
+            Assert.That(_h.Fake.WriteRequests, Is.Empty);
+        }
+
+        [TestCase("Customers", "ResultId", "Ver", 5)]
+        [TestCase("Customers", "ResultId", "Creator", 5)]
+        [TestCase("Customers", "ResultId", "Updator", 5)]
+        [TestCase("Customers", "ResultId", "CreatedTime", null)]
+        [TestCase("Customers", "ResultId", "UpdatedTime", null)]
+        [TestCase("Customers", "ResultId", "ResultId", 5)]
+        [TestCase("Tasks", "IssueId", "RemainingWorkValue", 5)]
+        public void 更新で読み取り専用の列を書くとエラー(string table, string key, string column, object? value)
+        {
+            //値が null (空にする) でもエラー
+            var e = Assert.ThrowsAsync<PleasanterException>(() => _h.Accessor.ExecuteAsync(TestDesign.DataSourceName,
+                $"update \"{table}\" set \"{column}\"=@p0 where \"{key}\"=@pid0", new() { ["@p0"] = value, ["@pid0"] = 1L }))!;
+            Assert.That(e.Message, Does.Contain("read-only"));
+            Assert.That(_h.Fake.WriteRequests, Is.Empty);
+        }
+
         [TestCase("select \"ResultId\" from \"Customers\" union select \"ResultId\" from \"Orders\"")]
         [TestCase("select \"ResultId\" from \"Customers\" where \"Title\" like @p0 escape '\\'")]
         [TestCase("select \"ResultId\" from \"Customers\" where lower(\"Title\") = @p0")]

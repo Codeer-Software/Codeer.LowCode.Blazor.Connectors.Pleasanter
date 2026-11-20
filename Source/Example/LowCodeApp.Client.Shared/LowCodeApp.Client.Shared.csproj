@@ -28,6 +28,9 @@
     <PackageReference Include="Codeer.LowCode.Blazor" Version="1.3.70" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\..\Codeer.LowCode.Blazor.Connectors.Pleasanter\Codeer.LowCode.Blazor.Connectors.Pleasanter.csproj" />
+  </ItemGroup>
+  <ItemGroup>
     <EmbeddedResource Include="Resources\colorpicker.png" />
   </ItemGroup>
 </Project>

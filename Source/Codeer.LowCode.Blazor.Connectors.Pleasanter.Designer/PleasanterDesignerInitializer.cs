@@ -24,6 +24,8 @@ namespace Codeer.LowCode.Blazor.Connectors.Pleasanter.Designer
         public static void Initialize(DesignerEnvironment designerEnvironment)
         {
             _environment = designerEnvironment;
+            //添付のフィールドをツールボックスに出す (本体は読み込み済みのアセンブリからフィールドの型を探す)
+            PleasanterFieldsInitializer.Initialize();
             var assembly = typeof(PleasanterDesignerInitializer).Assembly;
             foreach (var name in assembly.GetManifestResourceNames()
                          .Where(e => e.StartsWith(Prefix, StringComparison.Ordinal) && e.EndsWith(".md", StringComparison.OrdinalIgnoreCase))

@@ -64,6 +64,7 @@ URL・JSON・SQL を手で書く必要はありません。
 | プロジェクト | パッケージ |
 |---|---|
 | アプリ (サーバー) | `Codeer.LowCode.Blazor.Connectors.Pleasanter.Server` |
+| アプリ (画面。テンプレートの `Client.Shared`) | `Codeer.LowCode.Blazor.Connectors.Pleasanter` (添付のフィールドを使うときだけ) |
 | デザイナ | `Codeer.LowCode.Blazor.Connectors.Pleasanter.Designer` |
 
 ### アプリ (サーバー)
@@ -80,6 +81,8 @@ ModuleDataIO = new CustomizedModuleDataIO(Design.DesignData, this, pleasanter, T
 ```
 
 3 つ目の引数で、サイトの定義 (メタ情報) を配られたデザインから読みます (下の「メタ情報はファイルから読む」)。
+
+添付のフィールドを使うときは、下の「添付ファイル」の組み込みも足します。
 
 ### デザイナ
 
@@ -151,6 +154,66 @@ protected override void OnStartup(StartupEventArgs e)
   既存のレコードの画面では表示専用にし、入力させるのは新規作成の画面 (最初のコメント) にしてください
 - 検索の条件・並べ替え・集計には使えません (エラーになります)
 
+### 添付ファイル
+
+添付の項目 (`AttachmentsA`…) は、ツールボックスの「プリザンターの添付」フィールドで扱います (本体の FileField は使えません)。
+1 つのフィールドで、その項目のファイルの一覧・ダウンロード・追加 (複数)・削除ができます。
+
+| 設定 | 内容 |
+|---|---|
+| DbColumn | 添付の項目 (`AttachmentsA` など)。サイトのエディタか一覧に出している項目だけが列になります |
+| 1 ファイルの上限 (MB) | 画面でファイルを足すときの確かめです。これを超えるファイルは画面で足せません (入力エラー)。既定 10。サーバーでは確かめません (サーバー側の上限は下の 2 つ) |
+
+- 画面: ファイル名と大きさが並び、保存済みのファイルはクリックでダウンロードできます。編集できるときは「ファイルを追加」で足し、ごみ箱のボタンで削除の印を付けます (もう一度押すと外れます)。
+  足したファイル・削除の印は**保存したときに**プリザンターへ送られます。新しいレコードでもファイルを足して一緒に保存できます (ダウンロードは保存の後)
+- 一覧の列に置くと、ファイル名だけが並びます。一覧の列の「ユーザーによる並べ替え」はオフにしてください (この項目では並べ替えられません)
+- 表示専用・無効・権限は、ほかのフィールドと同じです。検索の条件・並べ替え・集計には使えません
+- レコードのコピーでは添付は写りません (コピーしたレコードは添付なしで始まります)
+- 保存の後に画面を読み直さない保存 (AutoSubmitField の自動保存など) の直後は、そのとき足したファイルを消せません (ダウンロードもできません)。画面を読み直すと消せます。
+  自動保存の送信中に、その保存で送っているファイルを取り消しても、ファイルはプリザンターに付きます (保存の後は名前だけ並びます)
+- 一度に選べるファイルは 100 個までです (超えると入力エラーになり、1 つも足しません)
+- 添付を足した保存がエラーになったとき (応答を受け取れず結果が分からないときも) は、プリザンター側の書き込みだけ済んでいることがあります (ロールバックしないため。下の「保存」)。
+  画面は足したファイルを未保存のまま持っているので、そのまま保存し直すと同じファイルがもう一度付きます (新しいレコードなら、レコードがもう一度作られます)。プリザンターのレコードを確かめてから保存し直してください
+- 値はファイルの一覧の JSON の文字です (`[{"Guid","Name","Size"}...]`)。このフィールドは値とファイルの操作をスクリプトに出していません。
+  サーバーのコードで `ModuleDataIO` から保存するときは、足すファイルを `{"Name","ContentType","Base64"}`、消すファイルを `{"Guid","Deleted":true}` の要素にします。
+  それ以外の要素は送られないので、読んだ値をそのまま保存しても何も変わりません。消せるのはそのレコードのその項目のファイルだけです
+- ファイルの中身は保存の要求に入ります。大きなファイルを扱うときは、アプリの要求の大きさの上限も合わせてください (ASP.NET Core の既定はおよそ 30 MB)。
+  プリザンターの項目の設定 (大きさの上限 `LimitSize` など) を超えると、保存がエラーになります。サーバー側で効く上限はこの 2 つです (「1 ファイルの上限」は画面での確かめだけ)
+
+**組み込み** (アプリに 3 か所):
+
+1. 画面のプロジェクト (テンプレートの `Client.Shared`) に `Codeer.LowCode.Blazor.Connectors.Pleasanter` を追加し、画面とサーバーの起動時にフィールドを読み込みます (本体はデザインのフィールドの型を、読み込み済みのアセンブリから探すため)
+
+   ```csharp
+   PleasanterFieldsInitializer.Initialize();   //画面: AppInfoService のコンストラクタ / サーバー: Program.cs
+   ```
+
+2. ダウンロードの口をアプリ (サーバー) の Controller に置きます。パスは `PleasanterAttachmentsFieldDesign.DownloadUrl`、判定は `PleasanterDbAccessor.GetAttachmentAsync` がします
+   (現在の利用者の権限でそのレコードのそのフィールドを読み、そこにあるファイルのときだけ中身を返す。読めなければ null)
+
+   ```csharp
+   [Authorize]
+   [ApiController]
+   public class PleasanterAttachmentsController(DataService dataService) : ControllerBase
+   {
+       [HttpGet(PleasanterAttachmentsFieldDesign.DownloadUrl)]
+       public async Task<IActionResult> DownloadAsync(string? module, string? id, string? field, string? guid)
+       {
+           var file = await dataService.Pleasanter.GetAttachmentAsync(dataService.ModuleDataIO, dataService.Design.DesignData, module, id, field, guid);
+           if (file == null) return NotFound();
+           Response.Headers.XContentTypeOptions = "nosniff";
+           return File(file.Content, "application/octet-stream", SafeFileName(file.FileName));   //SafeFileName は Example の Controller
+       }
+   }
+   ```
+
+   ファイル名は利用者が付けたものなので、応答のヘッダに入れる前に制御文字やパスの区切りを外してください。
+   ファイル名と Guid だけで中身を返す口は作らないでください (連携用の API キーは、テナント内のどの添付も読めます)
+
+3. `PleasanterDbAccessor` を Controller から使えるようにします (Example では `DataService` の `Pleasanter` プロパティ)
+
+デザイナは `PleasanterDesignerInitializer.Initialize` がフィールドをツールボックスに出すので、足すものはありません。
+
 ### 列の種類
 
 | プリザンターの項目 | 列の型 | フィールド |
@@ -160,6 +223,7 @@ protected override void OnStartup(StartupEventArgs e)
 | 日付 (`DateA`…) で書式が年月日のもの | 日付 | DateField |
 | 日付で時刻を持つもの・`StartTime`・`CompletionTime`・`CreatedTime`・`UpdatedTime` | 日時 | DateTimeField (SaveAsUtc はオフのまま) |
 | チェック (`CheckA`…) | 真偽 | BooleanField |
+| 添付 (`AttachmentsA`…) | 文字列 (ファイルの一覧の JSON) | プリザンターの添付 (上の「添付ファイル」) |
 
 - **日時は時差を持たない値として読み書きします。** プリザンターの日時は、API キーの利用者のタイムゾーンでの値のまま読み書きされます。DateTimeField の SaveAsUtc はオンにしないでください (ずれます)
 - 年月日の日付の項目に時刻の入った値がある (API などで時刻つきで書かれた) ときも、日付として読み、検索でもその日として扱います。
@@ -184,8 +248,11 @@ protected override void OnStartup(StartupEventArgs e)
 キー (`ResultId` / `IssueId`)・`Ver`・`Creator`・`Updator`・`CreatedTime`・`UpdatedTime`・`RemainingWorkValue` (残作業量。作業量と進捗率からプリザンターが計算する) は読み取り専用の列です。
 
 - レイアウトで表示専用 (IsViewOnly) にして置きます。値は保存のあとで読み直すと出ます
-- 値を入れて保存するとエラーになります
-- フィールドの名前を `CreatedAt` / `UpdatedAt` / `Creator` / `Updater` にしないでください。CLB のシステムフィールドになり、保存のたびに値を書こうとしてエラーになります (`CreatedTime` の列なら `Created` などの名前にします)
+- 新しいレコードの保存では、キー以外の読み取り専用の列に値があっても送りません (プリザンターが決めます)。作成日時などを表示しているモジュールでも、レコードのコピー (CopyModuleButtonField) をそのまま保存できます
+- 既存のレコードの保存でこれらの列に値を書こうとするとエラーになります。新しいレコードの保存でキーに値を入れてもエラーになります
+- フィールドの名前を `CreatedAt` / `UpdatedAt` / `Creator` / `Updater` / `DeletedAt` / `Deleter` にしないでください。CLB のシステムフィールドになり、CLB が値を書こうとします。
+  `UpdatedAt` / `Updater` は更新のたびに、`DeletedAt` / `Deleter` は削除 (論理削除になります) のときに書かれてエラーになります。
+  `CreatedAt` / `Creator` は作成のときだけ書かれ、エラーにはなりませんが、CLB が入れた値は送られません (`CreatedTime` の列なら `Created` などの名前にします)
 
 ### ほかのサイトとの関係
 
@@ -317,7 +384,8 @@ switch (result.Status)
 
 ### コネクターがまだ対応していないもの
 
-- 添付ファイル・画像・ロック・プロセス
+- 画像の項目・ロック・プロセス
+- 添付ファイルの名前の変更・並べ替え・プレビュー
 - 利用者・組織の名前の表示 (ID のまま)
 - Wiki・フォルダ・ダッシュボード・サイト統合のサイト
 - 利用者本人の API キーでの接続
@@ -329,6 +397,7 @@ switch (result.Status)
 - 楽観ロックは先に確かめるだけで、確かめてから書くまでの間の更新は防げません
 - ExecuteSqlField の SQL 文・QueryField などの SQL を直接書く機能は使えません (ExecuteSqlField は拡張 SQL の呼び出しだけ)
 - コメントは読むと JSON の文字で、書くと 1 件足すだけです (上の「コメント」)
+- 添付ファイルの中身は保存の要求に入ります (大きさの上限はアプリの設定次第。上の「添付ファイル」)
 - 選択肢はメタ情報の更新のときに取り込むだけです。画面の候補は Enum の定義から出します
 - サイトの定義はメタ情報のファイルから読みます。プリザンターでサイトの設定を変えたら、デザイナでメタ情報を更新してデプロイしてください
 - 列どうしの比較・JSON の列のノードでの検索・意味検索のようなフィールド独自の検索条件は使えません

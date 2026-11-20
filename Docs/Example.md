@@ -31,7 +31,7 @@ pwsh Source/Example/Data/setup-pleasanter.ps1 -Url http://localhost:59803/ -ApiK
 | サイト | 種類 | 項目 |
 |---|---|---|
 | `CLB見本_取引先` | 記録テーブル | 会社名・業種 (選択肢)・電話番号・備考 (5 件) |
-| `CLB見本_案件` | 記録テーブル | 案件名・取引先 (取引先へのリンク)・区分 (選択肢)・状況・金額・受注日・確認済・メモ (12 件) |
+| `CLB見本_案件` | 記録テーブル | 案件名・取引先 (取引先へのリンク)・区分 (選択肢)・状況・金額・受注日・確認済・メモ・資料 (添付) (12 件) |
 | `CLB見本_作業` | 期限付きテーブル | 作業名・案件 (案件へのリンク)・担当者 (選択肢)・状況・開始・完了・作業量・進捗率 (20 件) |
 
 終わりに、接続文字列に書く値が出ます。
@@ -158,7 +158,7 @@ dotnet run --project Source/Example/LowCodeApp.Server --launch-profile http
 | モジュール | 表 | 内容 |
 |---|---|---|
 | `Customer` (取引先) | `Customers` | 一覧・検索 (会社名・業種)・詳細。業種は Enum `業種` の SelectField。詳細にその取引先の案件の一覧 |
-| `Project` (案件) | `Projects` | 一覧 (受注日の降順・50 件ずつ)・検索 (案件名・取引先名・区分・状況・金額の範囲・受注日の範囲)・詳細。取引先は LinkField (選択のダイアログ)。状況はプリザンターでは数値の項目で、Enum `案件状況` (値が数字) の SelectField で名前を見せる。作成日時は表示だけ。詳細でその案件の作業を一覧で足す・直す・消す |
+| `Project` (案件) | `Projects` | 一覧 (受注日の降順・50 件ずつ)・検索 (案件名・取引先名・区分・状況・金額の範囲・受注日の範囲)・詳細。取引先は LinkField (選択のダイアログ)。状況はプリザンターでは数値の項目で、Enum `案件状況` (値が数字) の SelectField で名前を見せる。作成日時は表示だけ。詳細でその案件の作業を一覧で足す・直す・消す。資料 (添付の項目 `AttachmentsA`) はプリザンターの添付のフィールドで、詳細でファイルを足す・消す・ダウンロードし、一覧ではファイル名だけ |
 | `WorkTask` (作業) | `Tasks` | 一覧 (10 件ずつ)・検索 (作業名・案件・担当者・開始の範囲)・詳細。期限付きテーブルの開始・完了・作業量・進捗率。残作業量はプリザンターが計算するので表示だけ |
 | `AmountByCustomer` (取引先別の案件金額) | — | 案件の金額を取引先 × 区分で合計するクロス集計 (CrossTabField とスクリプト)。プリザンターに集計の API は無いので、コネクターが案件を全部読んで集計します |
 | `AppUser` (ユーザー) | `app_users` (Main) | ログイン中のユーザー (`CurrentUser`) を読むモジュール。読めるのは自分の行だけ (行の読み取り条件 `Id = CurrentUser.Id`)。画面からは作成・更新・削除しない |
@@ -167,3 +167,6 @@ dotnet run --project Source/Example/LowCodeApp.Server --launch-profile http
 
 - 取引先・案件・作業は UpdatedTime の楽観ロック付きです (画面を開いたあとにプリザンターで更新されると、保存が止まります)
 - 状況・担当者などの選択肢は、メタ情報のファイルの選択肢を Enum に写したものです。プリザンターで選択肢を変えたときは、メタ情報を更新して Enum を直します
+- 添付のダウンロードは `LowCodeApp.Server/Controllers/PleasanterAttachmentsController.cs` です (ログインが要る・そのレコードのその項目のファイルだけ返す)。
+  画面のフィールドは `LowCodeApp.Client.Shared` が参照する `Codeer.LowCode.Blazor.Connectors.Pleasanter` で、`AppInfoService` と `Program.cs` の `PleasanterFieldsInitializer.Initialize()` で読み込みます。
+  前の版のスクリプトで作った案件のサイトには資料の項目がありません。プリザンターでサイトのエディタに添付の項目 (`AttachmentsA`) を足してから、デザイナでメタ情報を更新してください

@@ -113,6 +113,49 @@ namespace Codeer.LowCode.Blazor.Connectors.Pleasanter.Test
             Assert.That(System.Text.Encoding.UTF8.GetString(DesignDataFileManager.ReadProjectServerFile(_directory, FileName)!), Is.EqualTo("{\"Tables\":[]}"));
         }
 
+        //今のフォルダをテスト用のフォルダにして呼ぶ (元のフォルダには何も書かない)
+        void InCurrentDirectory(string directory, Action action)
+        {
+            var original = Directory.GetCurrentDirectory();
+            Directory.SetCurrentDirectory(directory);
+            try
+            {
+                action();
+            }
+            finally
+            {
+                Directory.SetCurrentDirectory(original);
+            }
+        }
+
+        [Test]
+        public async Task プロジェクトのフォルダが空なら今のフォルダ()
+        {
+            var project = await WriteProjectAsync();
+            InCurrentDirectory(project, () =>
+                Assert.That(PleasanterMetadataFile.FromProject(string.Empty).Load("PL").Select(e => e.Name), Is.EquivalentTo(new[] { "Customers", "Orders", "Tasks", "Many" })));
+        }
+
+        [Test]
+        public async Task 配られたデザインのフォルダが空なら今のフォルダ()
+        {
+            var deploy = Deploy(await WriteProjectAsync(), new DateTime(2026, 1, 1, 10, 0, 0));
+            InCurrentDirectory(deploy, () =>
+                Assert.That(PleasanterMetadataFile.FromDeployedDesign(string.Empty).Load("PL").Select(e => e.Name), Is.EquivalentTo(new[] { "Customers", "Orders", "Tasks", "Many" })));
+        }
+
+        [TestCase("{\"Tables\":null}", "")]
+        [TestCase("{\"Tables\":[null]}", "")]
+        [TestCase("{\"Tables\":[null,{\"Name\":\"Customers\",\"ReferenceType\":\"Results\",\"Columns\":null}]}", "Customers:")]
+        [TestCase("{\"Tables\":[{\"Name\":\"Customers\",\"ReferenceType\":\"Results\",\"Columns\":[null,{\"Name\":\"Title\",\"Kind\":\"String\"},{\"Name\":null},{}]}]}", "Customers:Title")]
+        [TestCase("{\"Tables\":[{\"Name\":\"\",\"ReferenceType\":\"Results\"},{\"Name\":\"Wiki\",\"ReferenceType\":\"Wikis\"}]}", "")]
+        public void 手で直したファイルの無い値は無いものとして読む(string json, string expected)
+        {
+            DesignDataFileManager.WriteProjectServerFile(_directory, FileName, System.Text.Encoding.UTF8.GetBytes(json));
+            var tables = PleasanterMetadataFile.FromProject(_directory).Load("PL");
+            Assert.That(string.Join(";", tables.Select(e => e.Name + ":" + string.Join(",", e.Columns.Select(c => c.Name)))), Is.EqualTo(expected));
+        }
+
         // ---------------------------------------------------------------- 配られたデザイン (App.zip)
 
         //プロジェクトのフォルダを App.zip にして deploy に置く (デザイナのデプロイと同じく、サーバー専用ファイルは ServerFiles/ の下に入る)

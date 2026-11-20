@@ -12,6 +12,8 @@ namespace LowCodeApp.Server.Infrastructure
         public DbAccessor DbAccess { get; }
         public TemporaryFileManager TemporaryFileManager { get; }
         public CustomizedModuleDataIO ModuleDataIO { get; }
+        //プリザンターのデータソースを受け持つアクセサ (添付のダウンロードで使う)
+        public PleasanterDbAccessor Pleasanter { get; }
         //このリクエストが使うデザイン (最初に参照した時点の版に固定)
         public RequestDesign Design { get; }
         readonly IHttpContextAccessor? _httpContextAccessor;
@@ -24,9 +26,9 @@ namespace LowCodeApp.Server.Infrastructure
             DbAccess = new DbAccessor(SystemConfig.Instance.DataSources);
             TemporaryFileManager = new TemporaryFileManager(DbAccess, SystemConfig.Instance.TemporaryFileTableInfo, FileStorageTable.Storages, this);
             //プリザンターのデータソースはコネクターが、それ以外は DbAccess が受け持つ。表の定義は配られたデザインのメタ情報のファイルから読む
-            var pleasanter = new PleasanterDbAccessor(DbAccess, PleasanterConnection.FromDataSources(SystemConfig.Instance.DataSources),
+            Pleasanter = new PleasanterDbAccessor(DbAccess, PleasanterConnection.FromDataSources(SystemConfig.Instance.DataSources),
                 PleasanterMetadataFile.FromDeployedDesign(SystemConfig.Instance.DesignFileDirectory));
-            ModuleDataIO = new CustomizedModuleDataIO(Design.DesignData, this, pleasanter, TemporaryFileManager);
+            ModuleDataIO = new CustomizedModuleDataIO(Design.DesignData, this, Pleasanter, TemporaryFileManager);
         }
 
         //リクエストの外 (ジョブなど) で、そのユーザーの権限で使う DataService

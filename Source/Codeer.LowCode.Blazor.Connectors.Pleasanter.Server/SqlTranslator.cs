@@ -386,11 +386,13 @@ namespace Codeer.LowCode.Blazor.Connectors.Pleasanter.Server
             return (alias, column);
         }
 
-        //コメントの列は読み書きだけ (条件・並び・集計には使えない)
+        //コメントと添付の列は読み書きだけ (条件・並び・集計には使えない。値が JSON)
         static void RejectComments(string column)
         {
             if (column == PleasanterTableDefinition.CommentsColumn)
                 throw new PleasanterException("The Comments column of Pleasanter can only be read and written. It cannot be used in conditions, sorting or aggregation.");
+            if (PleasanterTableDefinition.IsAttachmentsColumn(column))
+                throw new PleasanterException($"The attachments column '{column}' of Pleasanter can only be read and written. It cannot be used in conditions, sorting or aggregation.");
         }
 
         static void CheckColumn(PleasanterTableDefinition definition, string column)

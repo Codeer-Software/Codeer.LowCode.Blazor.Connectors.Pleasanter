@@ -1,0 +1,147 @@
+@using System.Globalization
+@using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.AspNetCore.Components.Web
+@using Codeer.LowCode.Blazor.Components
+@using Codeer.LowCode.Blazor.Components.Primitives
+@using Codeer.LowCode.Blazor.Repository.Design
+@inherits FieldComponentBase<PleasanterAttachmentsField>
+
+@* スコープ付き CSS は使わない (ホスト・デザイナに CSS の結線を足さない)。見た目は Bootstrap のクラスとインラインのスタイル *@
+@if (Field.ModuleLayoutType == ModuleLayoutType.List)
+{
+  <span style="@TextStyle" title="@ListText">@ListText</span>
+}
+else
+{
+  <div class="@Field.GetValidationClassName()" style="@TextStyle">
+    @if (Field.Entries.Count == 0 && IsViewMode)
+    {
+      <span class="text-muted">@Text("なし", "None")</span>
+    }
+    @foreach (var entry in Field.Entries)
+    {
+      var url = Field.GetDownloadUrl(entry);
+      <div class="d-flex align-items-center flex-wrap" style="gap: 0.25rem; min-height: 1.75rem;">
+        <i class="bi bi-paperclip"></i>
+        @if (url != null && !entry.Deleted)
+        {
+          <a href="@url" download="@entry.Name" title="@entry.Name" style="overflow-wrap: anywhere;">@entry.Name</a>
+        }
+        else
+        {
+          <span title="@entry.Name" style="overflow-wrap: anywhere; @(entry.Deleted ? "text-decoration: line-through;" : string.Empty)">@entry.Name</span>
+        }
+        @if (entry.Size != null)
+        {
+          <small class="text-muted">(@FormatSize(entry.Size.Value))</small>
+        }
+        @if (entry.IsAdded)
+        {
+          <span class="badge bg-info text-dark">@Text("未保存", "Unsaved")</span>
+        }
+        @if (entry.Deleted)
+        {
+          <span class="badge bg-danger">@Text("削除", "Delete")</span>
+        }
+        @if (!IsViewMode)
+        {
+          @if (entry.IsAdded)
+          {
+            <button type="button" class="btn btn-sm btn-link text-danger p-0" disabled="@IsDisabled" title="@Text("取り消す", "Cancel")" @onclick="() => Field.RemoveAddedAsync(entry)">
+              <i class="bi bi-x-lg"></i>
+            </button>
+          }
+          else if (entry.Deleted)
+          {
+            <button type="button" class="btn btn-sm btn-link p-0" disabled="@IsDisabled" title="@Text("削除を取り消す", "Undo delete")" @onclick="() => Field.SetDeletedAsync(entry, false)">
+              <i class="bi bi-arrow-counterclockwise"></i>
+            </button>
+          }
+          else if (PleasanterAttachmentsField.CanDelete(entry))
+          {
+            <button type="button" class="btn btn-sm btn-link text-danger p-0" disabled="@IsDisabled" title="@Text("削除する", "Delete")" @onclick="() => Field.SetDeletedAsync(entry, true)">
+              <i class="bi bi-trash"></i>
+            </button>
+          }
+        }
+      </div>
+    }
+    @if (!IsViewMode)
+    {
+      <label class="btn btn-sm btn-outline-secondary mt-1 @(IsDisabled ? "disabled" : string.Empty)" title="@Text($"1 ファイル {Field.Design.MaxFileSizeMB} MB まで", $"Up to {Field.Design.MaxFileSizeMB} MB per file")">
+        <i class="bi bi-plus-lg"></i> @Text("ファイルを追加", "Add files")
+        @* 選んだ後に作り直す (同じファイルを選び直しても変更が届くように) *@
+        <InputFile @key="_inputKey" class="d-none" multiple disabled="@IsDisabled" OnChange="@AddFilesAsync" />
+      </label>
+    }
+  </div>
+  <ValidationFeedback IsValid="@Field.IsValid" ErrorMessage="@Field.ErrorText" />
+}
+
+@code {
+  const int MaxFilesAtOnce = 100;
+
+  int _inputKey;
+
+  bool IsViewMode => Field.IsViewOnly;
+  bool IsDisabled => Field.IsEnabled == false;
+
+  string ListText => string.Join(", ", Field.Entries.Where(e => !e.Deleted).Select(e => e.Name));
+
+  string? TextStyle
+  {
+    get
+    {
+      var style = string.Empty;
+      if (!string.IsNullOrEmpty(Field.Color)) style += $"color: {Field.Color};";
+      if (Field.FontSize != null) style += $"font-size: {Field.FontSize.Value.ToString(CultureInfo.InvariantCulture)}px;";
+      if (!string.IsNullOrEmpty(Field.FontFamily)) style += $"font-family: {Field.FontFamily};";
+      return style.Length == 0 ? null : style;
+    }
+  }
+
+  static string Text(string japanese, string english) => PleasanterAttachmentsField.IsJapanese ? japanese : english;
+
+  static string FormatSize(long size)
+  {
+    if (size < 1024) return size.ToString(CultureInfo.InvariantCulture) + " B";
+    if (size < 1024 * 1024) return (size / 1024.0).ToString("0.#", CultureInfo.InvariantCulture) + " KB";
+    return (size / 1024.0 / 1024.0).ToString("0.#", CultureInfo.InvariantCulture) + " MB";
+  }
+
+  async Task AddFilesAsync(InputFileChangeEventArgs e)
+  {
+    try
+    {
+      await AddFilesCoreAsync(e);
+    }
+    finally
+    {
+      _inputKey++;
+    }
+  }
+
+  async Task AddFilesCoreAsync(InputFileChangeEventArgs e)
+  {
+    if (MaxFilesAtOnce < e.FileCount)
+    {
+      Field.RejectTooMany(MaxFilesAtOnce);
+      return;
+    }
+    foreach (var file in e.GetMultipleFiles(MaxFilesAtOnce))
+    {
+      //上限を超えるファイルは中身を読まずに止める
+      if (Field.Design.MaxFileSizeBytes < file.Size)
+      {
+        Field.RejectTooLarge(file.Name);
+        return;
+      }
+      using var memory = new MemoryStream();
+      await using (var stream = file.OpenReadStream(Field.Design.MaxFileSizeBytes))
+      {
+        await stream.CopyToAsync(memory);
+      }
+      if (!await Field.AddFileAsync(file.Name, file.ContentType, memory.ToArray())) return;
+    }
+  }
+}

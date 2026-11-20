@@ -17,6 +17,11 @@ namespace Codeer.LowCode.Blazor.Connectors.Pleasanter.Server
         DateTime,
         /// <summary>Check。</summary>
         Bool,
+        /// <summary>
+        /// Attachments (添付)。値はプリザンターが返すファイルの並びの JSON の文字 (<see cref="PleasanterAttachments"/>)。
+        /// 書くと Base64 を持つ要素を足し、Deleted が true の要素を消す。条件・並び・集計には使えない。
+        /// </summary>
+        Attachments,
     }
 
     /// <summary>選択肢 1 つ (ChoicesText の 1 行の 値,表示)。</summary>
@@ -51,7 +56,7 @@ namespace Codeer.LowCode.Blazor.Connectors.Pleasanter.Server
 
     /// <summary>
     /// 表 (プリザンターのサイト 1 つ) の定義。api/items/{siteId}/getsite の応答から作る。
-    /// 列 = 標準の列 + SiteSettings の EditorColumnHash (全タブ)・GridColumns に出てくる Class / Num / Date / Description / Check の列
+    /// 列 = 標準の列 + SiteSettings の EditorColumnHash (全タブ)・GridColumns に出てくる Class / Num / Date / Description / Check / Attachments の列
     /// (API が行に入れる列。Columns は列の設定 (表示名・選択肢・Nullable など) を読むのに使う)。
     /// </summary>
     class PleasanterTableDefinition
@@ -59,7 +64,7 @@ namespace Codeer.LowCode.Blazor.Connectors.Pleasanter.Server
         internal const string Results = "Results";
         internal const string Issues = "Issues";
 
-        static readonly Regex ExtendedColumnPattern = new("^(Class|Num|Date|Description|Check)([A-Z]|[0-9]{3})$", RegexOptions.CultureInvariant);
+        static readonly Regex ExtendedColumnPattern = new("^(Class|Num|Date|Description|Check|Attachments)([A-Z]|[0-9]{3})$", RegexOptions.CultureInvariant);
         static readonly Regex LinkPattern = new(@"^\[\[([0-9]+)(,[^\]]*)?\]\]$", RegexOptions.CultureInvariant);
 
         /// <summary>表名 (接続の Sites に書いた別名)。</summary>
@@ -102,6 +107,8 @@ namespace Codeer.LowCode.Blazor.Connectors.Pleasanter.Server
                     //時差を持たない値 (デザイナが DateTimeField の SaveAsUtc を既定でオンにしない列型の名前にしておく)
                     PleasanterColumnKind.DateTime => (typeof(DateTime), "timestamp"),
                     PleasanterColumnKind.Bool => (typeof(bool), "boolean"),
+                    //添付は文字 (JSON) の列として見せる。デザイナで添付の列と見分けられる型の名前にする
+                    PleasanterColumnKind.Attachments => (typeof(string), AttachmentsRawTypeName),
                     _ => (typeof(string), "varchar"),
                 };
                 table.Columns.Add(new DbColumnDefinition
@@ -126,7 +133,7 @@ namespace Codeer.LowCode.Blazor.Connectors.Pleasanter.Server
         internal static string? GetHashName(string column)
         {
             if (!ExtendedColumnPattern.IsMatch(column)) return null;
-            foreach (var prefix in new[] { "Class", "Num", "Date", "Description", "Check" })
+            foreach (var prefix in new[] { "Class", "Num", "Date", "Description", "Check", "Attachments" })
             {
                 if (column.StartsWith(prefix, StringComparison.Ordinal)) return prefix + "Hash";
             }
@@ -134,6 +141,12 @@ namespace Codeer.LowCode.Blazor.Connectors.Pleasanter.Server
         }
 
         internal static bool IsExtendedColumn(string name) => ExtendedColumnPattern.IsMatch(name);
+
+        /// <summary>添付の列 (AttachmentsA など) か。</summary>
+        internal static bool IsAttachmentsColumn(string name) => ExtendedColumnPattern.IsMatch(name) && name.StartsWith("Attachments", StringComparison.Ordinal);
+
+        /// <summary>本体の表の定義 (DbColumnDefinition.RawDbTypeName) での添付の列の型の名前。</summary>
+        internal const string AttachmentsRawTypeName = "pleasanter_attachments";
 
         /// <summary>
         /// コメントの列。読むとプリザンターが返すコメントの JSON の文字 ([{"CommentId","CreatedTime","Creator","Body"}...]・新しい順・無ければ "[]")、
@@ -253,6 +266,7 @@ namespace Codeer.LowCode.Blazor.Connectors.Pleasanter.Server
                     "NumHash" => PleasanterColumnKind.Number,
                     "DateHash" => IsDateOnlyFormat(GetString(setting, "EditorFormat")) ? PleasanterColumnKind.Date : PleasanterColumnKind.DateTime,
                     "CheckHash" => PleasanterColumnKind.Bool,
+                    "AttachmentsHash" => PleasanterColumnKind.Attachments,
                     _ => PleasanterColumnKind.String,
                 };
                 table.Columns.Add(CreateColumn(name, kind, false, setting, findTableName));

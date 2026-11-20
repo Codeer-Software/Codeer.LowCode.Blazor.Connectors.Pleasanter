@@ -3,7 +3,7 @@
 ## プロジェクト概要
 
 Codeer.LowCode.Blazor (CLB) のモジュールをプリザンター (Implem.Pleasanter) のテーブル (サイト) に結び付けるコネクター。
-NuGet パッケージ `Codeer.LowCode.Blazor.Connectors.Pleasanter.Server` / `Codeer.LowCode.Blazor.Connectors.Pleasanter.Designer` (MIT) として配布する。
+NuGet パッケージ `Codeer.LowCode.Blazor.Connectors.Pleasanter.Server` / `Codeer.LowCode.Blazor.Connectors.Pleasanter` (画面のフィールド) / `Codeer.LowCode.Blazor.Connectors.Pleasanter.Designer` (MIT) として配布する。
 
 - **ターゲット**: .NET 8.0 / C# (Nullable 有効, ImplicitUsings 有効)
 - **本体リポジトリ**: `C:\tfs\codeer\Codeer.LowCode.Blazor` (参照用、直接編集しない)。本体は NuGet パッケージで参照する
@@ -29,15 +29,21 @@ Source/
 │   ├── PleasanterView.cs                # 条件の構文木 → View (ColumnFilterHash / ColumnFilterSearchTypes) と、読んだ行のメモリでの評価
 │   ├── QueryExecutor.cs                 # 計画の実行 (値を集める条件の読み替え・ページ・メモリでの絞り込み / 並び / 集計・結合)
 │   ├── PleasanterValues.cs              # 値の変換 (プリザンターの JSON ⇔ .NET・比較)
+│   ├── PleasanterAttachments.cs         # 添付の列の値 (JSON) の読み解き: 書き込みの値 → 足すファイル・消す Guid / 読んだ値のファイルの Guid
+│   ├── PleasanterAttachmentFile.cs      # 添付のダウンロード (PleasanterDbAccessor.GetAttachmentAsync) の結果
 │   └── PleasanterException.cs
+├── Codeer.LowCode.Blazor.Connectors.Pleasanter/          # 画面のフィールド (Razor クラスライブラリ・net8.0)。.Server と互いに参照しない (値は JSON の文字で渡る)
+│   ├── PleasanterAttachmentsField*.cs / PleasanterAttachmentsFieldComponent.razor   # 添付のフィールド (デザイン・データ・実行時・コンポーネントの 4 つ)
+│   └── PleasanterFieldsInitializer.cs   # Initialize() = このアセンブリを読み込む (本体は読み込み済みのアセンブリからフィールドの型を探す)
 ├── Codeer.LowCode.Blazor.Connectors.Pleasanter.Designer/ # デザイナ用 (WPF)。SpecDocs の登録・メタ情報の更新メニュー・デザイナ用の IDbAccessor
-│   ├── PleasanterDesignerInitializer.cs # Initialize(env) = SpecDocs の登録 / Setup(env) = Tools のメニュー (メタ情報の更新) / CreateDbAccessor (定義はプロジェクトのメタ情報のファイルから読む)
+│   ├── PleasanterDesignerInitializer.cs # Initialize(env) = SpecDocs の登録・添付のフィールドをツールボックスに出す / Setup(env) = Tools のメニュー (メタ情報の更新) / CreateDbAccessor (定義はプロジェクトのメタ情報のファイルから読む)
 │   └── SpecDocs/Pleasanter.md           # AI がプリザンターのモジュールを設計するための仕様 (デザイン側のことだけを書く)
 ├── Codeer.LowCode.Blazor.Connectors.Pleasanter.Test/     # NUnit。HTTP の偽物 (Harness/FakePleasanter) の単体テストと、実物のプリザンターを相手にした結合テスト (Live/)
 └── Example/                                              # サンプル (パッケージにしない)。動かし方は Docs/Example.md
     ├── LowCodeApp.Designer/         # コネクターを組み込んだデザイナ (WPF・net8)。結線の見本 (App.xaml.cs / DbAccessorFactory.cs)。Design の AppUser のため Extras.Designer も組み込む
     ├── LowCodeApp.Server/ LowCodeApp.Client/ LowCodeApp.Client.Shared/   # Web アプリ (net10)。Starter の Cookie ホストを書き出したもの (FileMaker 版の Example と同じ)
-    │                                # テンプレートとの違い: DataService.cs の PleasanterDbAccessor の 2 行 (表の定義は配られたデザインのメタ情報のファイル)・.Server の ProjectReference・appsettings (Main = SQLite / Pleasanter)・SSO (下記)
+    │                                # テンプレートとの違い: DataService.cs の PleasanterDbAccessor の 2 行 (表の定義は配られたデザインのメタ情報のファイル)・.Server の ProjectReference・appsettings (Main = SQLite / Pleasanter)・SSO (下記)・
+    │                                # 添付のダウンロードの Controller (Controllers/PleasanterAttachmentsController.cs)・画面のフィールドのパッケージの参照と PleasanterFieldsInitializer.Initialize() (Program.cs と AppInfoService)
     │                                # プリザンターの接続文字列は appsettings に書かない (環境変数 ConnectionStrings__Pleasanter)
     ├── Design/                      # サンプルのデザイン (取引先・案件・作業・取引先別の案件金額・ユーザー)。ServerFiles/pleasanter.Pleasanter.metadata.json はサンプルのサイトから書き出したもの
     │                                # designer.settings.Development.json (接続文字列・配置先) は gitignore。作り方は Docs/Example.md
@@ -47,8 +53,9 @@ Source/
     └── Tests/sso/                   # SSO の結合テスト (Playwright。実物のプリザンターにブラウザでログインする)
 ```
 
-パッケージは 2 つ: サーバーは `.Server`、デザイナは `.Designer` (`.Server` に依存)。**モックのプロジェクトは作らない** (実物のプリザンターで確かめる)。
-`.Server` の csproj は FileMaker 版と同じく `GeneratePackageOnBuild` なので、ビルドすると bin に nupkg ができる。
+パッケージは 3 つ: サーバーは `.Server`、画面のフィールドは `Codeer.LowCode.Blazor.Connectors.Pleasanter` (クライアント用。本体だけに依存)、デザイナは `.Designer` (`.Server` と画面のフィールドに依存)。
+`.Server` は画面のフィールドのパッケージを参照しない (フィールドの型は名前で見る)。**モックのプロジェクトは作らない** (実物のプリザンターで確かめる)。
+csproj は FileMaker 版と同じく `GeneratePackageOnBuild` なので、ビルドすると bin に nupkg ができる。
 
 ## ビルド・テスト
 
@@ -105,6 +112,8 @@ Provider=Pleasanter;Url=https://example.com/pleasanter/;ApiKey=...;Sites=Project
 | 型 | 内容 |
 |---|---|
 | `PleasanterDbAccessor(IDbAccessor inner, IEnumerable<PleasanterConnection> connections, PleasanterMetadataFile? metadataFile = null)` | デコレータ。`metadataFile` を渡すと表の定義をそのファイルから読み、プリザンターに取りに行かない (ファイルに無い表はエラー)。null なら表ごとに最初の 1 回 getsite を読む |
+| `PleasanterDbAccessor.GetAttachmentAsync(ModuleDataIO io, DesignData designData, string? moduleName, string? id, string? fieldName, string? guid)` | 添付のフィールドのファイル 1 つを現在の利用者の権限で読む (ホストのダウンロードの Controller が呼ぶ)。読めなければ null (理由は区別しない・例外を投げない)。下の「添付」 |
+| `PleasanterAttachmentFile` | `GetAttachmentAsync` の結果。`FileName` (レコードの添付の一覧の名前)・`Content` |
 | `PleasanterConnection` | `PleasanterConnection(PleasanterConnectionSettings)` / `static List<PleasanterConnection> FromDataSources(IEnumerable<DataSource>)` (同じ設定には同じ接続) / `Settings` / `VerifySessionAsync(...)` / `DefaultSessionCookiePrefixes` / `DefaultWhoAmISqlName` |
 | `PleasanterConnectionSettings` | `FromDataSource(DataSource)` (プリザンター用でなければ null)・各設定のプロパティ・`ProviderName`・`DefaultEmptyDate` |
 | `PleasanterMetadataFile` | `FromProject(projectDirectory)` (デザイナ: プロジェクトのサーバー専用ファイル) / `FromDeployedDesign(designFileDirectory)` (Web アプリ: 配られた App.zip の中) / `static UpdateAsync(PleasanterConnection, projectDirectory)` (getsite を読んでプロジェクトに書く) |
@@ -113,10 +122,20 @@ Provider=Pleasanter;Url=https://example.com/pleasanter/;ApiKey=...;Sites=Project
 
 表と列の定義 (`PleasanterTableDefinition` / `PleasanterColumnDefinition` / `PleasanterChoice` / `PleasanterColumnKind`) は internal (外へは定義のファイルと本体の DbTableDefinition で見せる)。
 
+画面のフィールドのパッケージ (`Codeer.LowCode.Blazor.Connectors.Pleasanter`) の公開の型:
+
+| 型 | 内容 |
+|---|---|
+| `PleasanterAttachmentsFieldDesign` | 添付のフィールドの設計。`DbColumn` (添付の列)・`MaxFileSizeMB` (1 ファイルの上限・既定 10)・`const DownloadUrl` (`api/pleasanter/attachments/download`。ホストのダウンロードの口のパス) |
+| `PleasanterAttachmentsFieldData` | 値 = 添付の列の JSON の文字 (`ValueFieldDataBase<string>`) |
+| `PleasanterAttachmentsField` | 実行時のフィールド (`FieldBase<Design>`)。スクリプトに出すのは本体の FieldBase のものだけ (値・ファイルの操作は出さない) |
+| `PleasanterAttachmentsFieldComponent` | 画面 (Bootstrap のクラスとインラインのスタイルだけ。スコープ付き CSS を持たない) |
+| `PleasanterFieldsInitializer.Initialize()` | このアセンブリを読み込む。クライアントとサーバーの起動時に呼ぶ (デザイナは `.Designer` の Initialize が呼ぶ) |
+
 ### 表と列
 
 - 列名 (DbColumn) = プリザンターの内部の列名そのまま。記録テーブル (Results): `ResultId` (キー)・`Title`・`Body`、期限付きテーブル (Issues): `IssueId` (キー)・`Title`・`Body`・`StartTime`・`CompletionTime`・`WorkValue`・`ProgressRate`・`RemainingWorkValue`、
-  共通: `Status`・`Manager`・`Owner`・`Ver`・`Creator`・`Updator`・`CreatedTime`・`UpdatedTime`・`Comments`、拡張の列: `ClassA`…・`NumA`…・`DateA`…・`DescriptionA`…・`CheckA`…
+  共通: `Status`・`Manager`・`Owner`・`Ver`・`Creator`・`Updator`・`CreatedTime`・`UpdatedTime`・`Comments`、拡張の列: `ClassA`…・`NumA`…・`DateA`…・`DescriptionA`…・`CheckA`…・`AttachmentsA`…
 - **拡張の列は `SiteSettings.EditorColumnHash` (全部のタブ) と `GridColumns` に出てくるものだけ。** `Columns` (列の設定) だけにある列は定義に入れず、表示名・選択肢などの設定として使う。
   理由: プリザンターの API が行に入れる列は `SiteSettings.ReadableColumns` = エディタの列 ∪ 一覧の列 ∪ 標準の列で、`Columns` だけにある列はいつも空で返るため (ソースで確認。仕様の指示「`Columns` に出てくる列も入れる」から外した)。
   セクション (`_Section-n`)・リンク (`_Links-n`) は名前の形で外れる。空のサイトでも定義が作れる (先頭のレコードから推し量らない)
@@ -124,12 +143,15 @@ Provider=Pleasanter;Url=https://example.com/pleasanter/;ApiKey=...;Sites=Project
   書くと空でない文字を新しいコメント 1 件として足す (空・null は送らない。前のコメントは変わらない・消せない)。条件・並び・集計に使うと `NotSupported`
   (View の条件 `{"Comments":[...]}` は実物で 1 行も返さなかった・値が JSON のため)。読み込んだレコードのフィールドには JSON が入り、それを書き換えて保存すると書き換えた文字全体が 1 件のコメントになる
   (本体は変えたフィールドだけ送るので、変えなければ送らない)。本体に「読むだけ・書くだけ」の列を設計で選ぶ口が無いので、読みと書きで値の意味が違うのはこの列の制限として文書に書いてある
-- `Attachments*`・`Locked`・`SiteId` などは列にしない (未対応。添付は下の「添付の調査」)
+- `AttachmentsA`… (添付) は種類 `Attachments` の列 (本体へは文字・`RawDbTypeName` は `pleasanter_attachments`)。値はファイルの並びの JSON の文字。読み書きの意味は下の「添付」。条件・並び・集計に使うと `NotSupported`
+- `Locked`・`SiteId` などは列にしない (未対応)
 - 型: Class / Description / Title / Body → string、Num と Status / Manager / Owner / Creator / Updator / Ver / キー → decimal、
   Date → 列の設定 `EditorFormat` が無いか `Ymd` なら DateOnly (`date`)、それ以外 DateTime (`timestamp`)、CreatedTime / UpdatedTime / StartTime / CompletionTime → DateTime、Check → bool
 - 数値の列が null を持てるかは列の設定 `Nullable` (既定は持てない = 空は 0)。本体へは全部の列を null 可で見せる (NOT NULL にすると本体が空を型の既定値に置き換えて書くため。FileMaker と同じ)
 - 読み取り専用 (判定は `PleasanterTableDefinition.IsReadOnlyColumn` の 1 か所): キー・`Ver`・`Creator`・`Updator`・`CreatedTime`・`UpdatedTime`・`RemainingWorkValue` (作業量と進捗率から計算される)。
-  作成で値があればエラー・更新の対象に入っていたらエラー
+  作成ではキー以外 (プリザンターが決める列) は値があっても送らない・作成でキーに値があればエラー・更新の対象に入っていたら (null でも) エラー。
+  作成で黙って外すのは、レコードのコピー (CopyModuleButtonField) が作成日時などを表示しているフィールドの値も写して作成に乗せるため (2026-11-20)。
+  本体のシステムフィールドの名前 (`UpdatedAt` / `Updater` は更新で、`DeletedAt` / `Deleter` は論理削除で書かれる) を読み取り専用の列に付けると保存がエラーになる。`CreatedAt` / `Creator` は作成のときだけ書かれるのでエラーにはならない (値は送らない)
 - タイトルを複数の列で作るサイト (`TitleColumns` が `["Title"]` 以外) は `TitleIsRaw = false`。そのサイトの `Title` の条件・並びはプリザンターでは表示用のタイトルで評価されるので、メモリで評価・並べる
 - 選択肢 (`ChoicesText`) は 1 行 1 つ (`値,表示[,短い表示,CSS]`)。`[[サイトID]]` (オプションは `[[1200,NoAddButton]]` のように括弧の中) の行はリンク (`Sites` にあれば相手の表名)。ほかの `[[...]]` (ユーザー・組織) は選択肢にしない。
   画面へは Enum の定義・LinkField に写す (実行時は使わない)。複数選択 (`MultipleSelections`) の列は条件をメモリで評価する (値の持ち方を解釈しない)
@@ -193,7 +215,7 @@ View に写す葉 (値は ColumnFilterHash に JSON の配列の文字で書く)
 #### 受け付ける SQL / 拒否する SQL (まとめ)
 
 - 受け付ける: 本体の `SelectSqlCreator` の一覧・件数 (`count(*)`)・LinkField の left join・exists・`AggregateSqlCreator` の集計・`insert ... values (...), (...) returning キー`・`update ... set ... where キー = @p [and ...]`・`delete from ... where キー = @p [and ...]`
-- 拒否する (`PleasanterException`): union・関数の比較 (`lower(...)` など)・inner join・前方一致 / 後方一致の like (`'%x%'` の形でない like)・escape の無い like (本体は escape をいつも付ける)・上記の受け付けない exists・上記以外の日付の式・`Comments` の条件 / 並び / 集計・`ExecuteSqlCommandAsync` の SQL 文 (`CommandType = Sql`)・`GetConnection`
+- 拒否する (`PleasanterException`): union・関数の比較 (`lower(...)` など)・inner join・前方一致 / 後方一致の like (`'%x%'` の形でない like)・escape の無い like (本体は escape をいつも付ける)・上記の受け付けない exists・上記以外の日付の式・`Comments` と添付の列の条件 / 並び / 集計・`ExecuteSqlCommandAsync` の SQL 文 (`CommandType = Sql`)・`GetConnection`
 
 ### 書き込み
 
@@ -204,6 +226,40 @@ View に写す葉 (値は ColumnFilterHash に JSON の配列の文字で書く)
 - 書き込みはやり直さない。送ったあとの通信の失敗・5xx・想定外の応答は `WriteResultUnknown`
 - 保存はデータソースごと・1 件ごとに確定する (トランザクションに入らない・ロールバックで戻らない)。DB と混ざる保存も拒否しない
 - `Comments` は空でない値だけ送る (足すだけ)。更新の本文が空になれば update を送らない
+- 添付の列は足すファイルと消すファイルだけ `AttachmentsHash` に入れて送る (下の「添付」)
+
+### 添付
+
+プリザンターの添付の列 (`AttachmentsA`…) は、列ごとにファイルの並び。行の `AttachmentsHash` にはメタ情報 (Guid・Name・Size など) だけが入り、中身は `api/binaries/{guid}/get` で読む。
+本体の FileField (1 ファイル・中身はホストのファイルストレージ) は使わず、専用のフィールド (画面のフィールドのパッケージの `PleasanterAttachmentsField`) で扱う。
+
+- 値: 列の JSON の文字。読むと `[{"Guid","Name","Size",...}]` (ファイルが無ければ `"[]"`)
+- 書く: 同じ形の JSON の配列の文字。**送るのは Base64 を持つ要素 (追加: `{Name, ContentType, Base64}`) と `Deleted: true` の要素 (削除: `{Guid, Deleted: true}`) だけ。** ほかの要素 (読んだままのファイル) は送らない
+  (読んだ値をそのまま書いても何も変わらない)。足すものも消すものも無ければその列は送らない (本文が空なら update も送らない)。null・空の文字も送らない。
+  追加の `ContentType` が無ければ `application/octet-stream` を入れる (無いとプリザンターは `text/plain` にする)。送る追加の要素は Name・ContentType・Base64 の 3 つだけ
+- 形が不正ならエラー (`InvalidRequest`): JSON の配列でない・要素がオブジェクトでない・追加に Name が無い / Base64 が読めない・削除に Guid (32 桁の 16 進) が無い・Base64 と Deleted の両方を持つ
+- **消す Guid は、そのレコードのその列に今あるものだけ送る** (更新の前に、存在の確認と同じ条件で行を読んで絞る。無いものは黙って外す)。
+  プリザンターは追加と一緒に送られた削除を、別のレコードの添付の Guid でも消してしまう (`Attachment.SqlStatement` が Guid だけで binaries を消す) ため。作成では削除を送らない
+- 中身の読み出し: `PleasanterConnection.GetBinaryAsync(guid)` (internal・読み出しなのでやり直す)。**連携用の API キーはテナント内のどの添付も読めるので、Guid だけで中身を返す口を作らない。**
+- `GetAttachmentAsync(io, designData, module, id, field, guid)` (ホストの Controller が呼ぶ): モジュールがこのアクセサのプリザンターのデータソースで、フィールドが添付のフィールド (型の名前で見る) で、その DbColumn が添付の列で、
+  Id のフィールドがキーの列であることを確かめる → `io.GetListAsync` (通常の読み出し = モジュール・行・フィールドの権限が効く) で Id が一致する行のそのフィールドだけを読む →
+  その値に guid のファイルがあることを確かめる → 中身を読み、`ReferenceId` がそのレコードであることを確かめる → 名前 (レコードの一覧の名前) と中身を返す。どれかが満たせなければ null。例外は投げない (中で握る)
+- `designData` を引数で受けるのは、本体の `ModuleDataIO` がデザインを外へ出さないため (ホストは `ModuleDataIO` を作ったのと同じデザインを渡す)
+
+画面のフィールド (`PleasanterAttachmentsField`):
+
+- 表示: ファイル名と大きさ。保存済みのレコードの読んだときからあるファイルだけダウンロードのリンク (`DownloadUrl?module=&id=&field=&guid=` の GET・`download` 属性)。足したファイル・新しいレコードにはリンクを出さない
+- 編集: ファイルを足す (複数選べる)・足したファイルを取り消す・読んだファイルに削除の印を付ける / 外す。保存で反映し、保存の後は本体の読み直しで一覧が新しくなる (読み直さない軽い保存の後は、消したものを外し足したものを名前だけにする)
+- 変更が無ければ値は読んだ文字のまま (保存で送らない)。変更があれば、読んだファイル (消すものは `Deleted: true`) と足すファイル (Base64) の並び
+- 1 ファイルの上限 (`MaxFileSizeMB`) を超えるファイルは中身を読まずに入力エラーにする (画面での確かめだけ。サーバー側では効かない)。`IsRequired` は削除の印の無いファイルが 1 つ以上
+- レコードのコピーでは写さない (設計クラスが `IConfirmCopyFieldDesign.NeedCopy => false`。写すと元のレコードの添付が「あるように見えて」保存では送られない)
+- 消す印は Guid の分かる読んだファイルだけ (`CanDelete`)。読み直さない軽い保存 (AutoSubmitField など) の直後の足したファイルは名前だけで Guid が無いので、読み直すまで消せない (印を付けると次の保存が Guid の無い削除でエラーになるため)
+- ViewOnly・無効・権限は本体の FieldBase どおり。一覧の行 (`ModuleLayoutType.List`) ではファイル名だけ (カンマ区切り)。検索の部品は無い。スクリプトに出すメンバーは足していない
+- ファイルの選択欄は選ぶたびに作り直す (同じファイルを選び直しても届くように)。一度に選べるのは 100 個まで (`e.FileCount` で先に入力エラー。`GetMultipleFiles` は超えると例外のため)
+- 読み直さない保存の後 (`AcceptChanges`) は、送った値の追加 (Base64 のある要素。名前と中身で 1 つずつ突き合わせる) と削除 (`Deleted: true`) だけを保存済みにし、送信の間に足した・印を付けた分は変更として残す
+  (残さないと次の保存で同じファイルが二重に付く)。送った追加を送信の間に取り消していたら (今の一覧に無い)、プリザンターには付いたので名前だけの保存済みの行 (中身・Guid なし) として足す。保存がエラー (結果が分からないときも) ならフィールドは足したファイルを持ったままなので、プリザンター側だけ書けていると保存し直しで同じファイルがもう一度付く (Docs に注意として書いた)。
+  テスト: `AttachmentsFieldTest` (本体の公開の口 `ModuleCreationService` で Module を作り、自動保存の送信の間に操作する。`Harness/FieldHarness`)
+- 中身は保存の要求 (JSON) に Base64 で入るので、要求の大きさの上限 (ホストの Kestrel の既定はおよそ 30 MB) を超える保存はホストの設定次第
 
 ### ExecuteSqlField → 拡張 SQL
 
@@ -226,6 +282,7 @@ View に写す葉 (値は ColumnFilterHash に JSON の配列の文字で書く)
 ### 定義のファイル (メタ情報)
 
 `pleasanter.<データソース名>.metadata.json` に表と列 (種類・読み取り専用・null を持てるか・表示名・選択肢・リンク・複数選択) を書く。接続先・API キーは書かない。
+ファイル名のデータソース名は、文字 (`char.IsLetterOrDigit` = 日本語などの文字も含む)・数字・`_`・`-`・`.` を残し、それ以外を `_` にする。
 **置き場所は本体のサーバー専用ファイル** (デザインのプロジェクトの ServerFiles。デザインと一緒に App.zip で配られ、画面へは送られない)。前の置き場所 (プロジェクトの直下) は読まない。
 
 - 書く: `PleasanterMetadataFile.UpdateAsync(connection, projectDirectory)` (static) が Sites の全部の getsite を読み、内容を読み直して確かめてから `DesignDataFileManager.WriteProjectServerFile` で書く (書き終えてから置き換える・読めなければファイルを変えない・同じファイルの更新は直列)
@@ -236,6 +293,7 @@ View に写す葉 (値は ColumnFilterHash に JSON の配列の文字で書く)
   プロジェクトはファイルを毎回読み、中身が変わったときだけ解釈し直す。読み直しは場所ごとに 1 つずつ (ロック)・解釈した定義は差し替えるだけで中を変えない (読む側はロックなし)。
   App.zip の名前は本体の配置の決まり (`<designFileDirectory>/App.zip`) を前提にしている (Extras の DesignDataStore と同じ)
 - ファイルを渡さない 2 引数の形は従来どおり表ごとに最初の 1 回 getsite を読む
+- `FromProject("")` / `FromDeployedDesign("")` の空のフォルダは今のフォルダ (本体が App.zip を探す場所と同じ)。手で直したファイルの null (`Tables` の要素・`Columns`・列の要素)・名前の無い表 / 列・Results / Issues でない表は無いものとして読む
 
 ### ブラウザのセッションの確認 (SSO)
 
@@ -271,6 +329,9 @@ View に写す葉 (値は ColumnFilterHash に JSON の配列の文字で書く)
 - コネクターの結線: `LowCodeApp.Server/Infrastructure/DataService.cs` の 2 行 (`PleasanterConnection.FromDataSources(SystemConfig.Instance.DataSources)` と `new PleasanterDbAccessor(DbAccess, connections, PleasanterMetadataFile.FromDeployedDesign(SystemConfig.Instance.DesignFileDirectory))`)・
   csproj の `.Server` への ProjectReference (利用者のアプリでは PackageReference)。デザイナは `LowCodeApp.Designer/App.xaml.cs` と `DbAccessorFactory.cs`
 - appsettings: データソース `Main` (SQLite・ログインするユーザー) と `Pleasanter` (`DataSourceType: PostgreSQL`)。プリザンターの接続文字列は環境変数 `ConnectionStrings__Pleasanter` で渡す (API キーを含むので appsettings に書かない)
+- 添付: `LowCodeApp.Client.Shared` が画面のフィールドのパッケージを参照し (サーバーは Client 経由で届く)、`AppInfoService` のコンストラクタと `Program.cs` で `PleasanterFieldsInitializer.Initialize()` を呼ぶ。
+  ダウンロードは `Controllers/PleasanterAttachmentsController.cs` (`[Authorize]`・GET `PleasanterAttachmentsFieldDesign.DownloadUrl`・見つからなければ 404・`application/octet-stream` + `Content-Disposition: attachment` + `X-Content-Type-Options: nosniff`・
+  ファイル名から制御文字・パスの区切り・`"` を外す)。`DataService` が `PleasanterDbAccessor` を `Pleasanter` プロパティで出す。案件 (`Project`) の詳細と一覧に「資料」(`AttachmentsA`) を置いた (一覧の列は `CanUserSort: false`)
 
 ### SSO (プリザンターのログインを使うシングルサインオン)
 
@@ -318,6 +379,10 @@ View に写す葉 (値は ColumnFilterHash に JSON の配列の文字で書く)
 - **要求の分割 (FileMaker 版の「1 回の要求に入らない数の値を組に分ける」) は移植しない。** 値が 500 個を超える一致は緩めてメモリで評価する
 - **拡張の列はエディタと一覧に出てくるものだけ** (上記。`Columns` だけの列は API の行に入らない)
 - **SSO はライブラリは確認だけ・結線はホスト**
+- **添付は専用のフィールド。本体の FileField は使わない。** 中身のダウンロードはホストの Controller が `GetAttachmentAsync` を呼ぶ (ライブラリに Controller を持たせない)。
+  Guid だけで中身を返す口は作らない・消す Guid はそのレコードの列にあるものだけ送る (2026-11-20)
+- **添付の `MaxFileSizeMB` は画面での確かめ。サーバー側では効かない。** サーバー側の上限はプリザンターの項目の設定 `LimitSize` (超えると HTTP 442) とアプリの要求の大きさの上限 (Kestrel など) (2026-11-20)
+- **添付はレコードのコピーで写さない。読み直さない保存の直後に足したファイルは、読み直すまで消せない** (2026-11-20)
 
 ## 守ること
 
@@ -328,7 +393,7 @@ View に写す葉 (値は ColumnFilterHash に JSON の配列の文字で書く)
 - テストで作ったサイトは消す。既存のサイトとそのレコードは触らない
 - 文書 (README・Docs・CLAUDE.md・コメント) は日本語。会社名の表記は Codeer
 
-## 確認済み・未確認・未実装 (2026-11-19 時点)
+## 確認済み・未確認・未実装 (2026-11-20 時点)
 
 ### 実物で確かめたこと (プリザンター 1.5.9.1・PostgreSQL・`Live/` のテストと手で送った要求)
 
@@ -336,13 +401,19 @@ View に写す葉 (値は ColumnFilterHash に JSON の配列の文字で書く)
 - 上の表の View の書き方 (文字の一致・部分一致・空・数値と日付の範囲・チェック・`and_n` / `or_n` の入れ子) が SQL の条件と同じ行を返すこと
   (`Live/LiveDifferentialTest` が約 75 の条件で View の道とメモリだけの道の結果・順・件数を突き合わせる)
 - 結合先の列での条件・表示名・並び、exists、リンクの値での検索、集計 (リンクの軸・軸なし)
-- 作成・更新・削除・空にする値 (上記の対応)・読み取り専用の列のエラー・別のサイトの行の ID では書かないこと・UpdatedTime の楽観ロック・期限付きテーブルの作成と RemainingWorkValue の計算・複数行の insert
+- 作成・更新・削除・空にする値 (上記の対応)・読み取り専用の列 (更新と作成のキーはエラー・作成で Ver / Creator / Updator / CreatedTime / UpdatedTime / RemainingWorkValue に値があってもプリザンターが決めた値になる)・別のサイトの行の ID では書かないこと・UpdatedTime の楽観ロック・期限付きテーブルの作成と RemainingWorkValue の計算・複数行の insert
 - `RemainingWorkValue` を View の条件に書くと HTTP 302 (エラー画面 `/errors` へ)。並び (`ColumnSorterHash`) はエラーにならず、値の順に並んだ (3 行)
 - 定義のファイルの書き出し (実物の getsite から)。書き出したファイルを zip (App.zip の形) に入れ、`FromDeployedDesign` のアクセサで一覧・リンクの条件・作成・更新・削除ができること (`Live/LiveMetadataFileTest`)
 - 日付だけの列 (`Ymd`) に時刻つきの値 (`2026-03-10T15:45:00`) を入れたレコードで、日単位の範囲の View (`=`・`<=`・`<`・`>=`・`>`) がメモリの道と同じ行を返すこと (`Live/LiveDifferentialTest`・`Live/LiveReadTest`)
 - ユーザーの選択肢の列 (`[[Users]]`) の条件 `Own` が API キーの利用者の ID に読み替えられること・緩めた読み出しで文字の `Own` と比べた結果がメモリの道と同じこと
 - 日付の軸の集計 (月・年度開始 4 月の四半期・日) が期待どおりのグループと値を返すこと (`Live/LiveAggregateTest`)
 - コメント: 作成と更新で 2 件足され、空の更新では足されず、読むと新しい順の JSON の文字 (`Body`) で返ること。条件に使うとエラー (`Live/LiveCommentsTest`)
+- 添付 (`Live/LiveAttachmentsTest`): 作成で複数足せる・更新で足すと消すが一緒にできる (消したファイルの binaries/get は 404)・読んだままの値を書いても変わらない・
+  別のレコードの Guid を追加と一緒に送っても消えない (コネクターの絞り込みを外すと実物で消えることも確かめた)・ダウンロードはレコードとフィールドの添付だけ中身を返し、
+  無い Guid・別のレコードの Guid・別のフィールド・添付のフィールドでない・プリザンターでないモジュール・読めないレコード (行の閲覧条件) は null・条件に使うとエラー
+- 添付の API (手で送った要求): 行の `AttachmentsHash` の列はオブジェクトの配列 (エディタにある列でファイルが無ければ `[]`)・`api/binaries/{guid}/get` は `Response` に `ReferenceId`・`FileName`・`ContentType`・`Base64` などを返し、無い Guid は HTTP 404・
+  列の `LimitSize` を超えると HTTP 442 (StatusCode 442)・`LimitSize` が無ければ 1 MB を超えるファイルも入る・`..\x.txt` のような名前・空の Base64 (大きさ 0) も入る・Base64 が読めなければ HTTP 400・`ContentType` が無ければ `text/plain`・
+  エディタに無い列への書き込みは黙って無視される・別のレコードの Guid の削除は単独では無視されるが追加と一緒だと消える
 - 拡張 SQL: `api/extended/sql` でパラメータ (文字・数値) を渡して出力のパラメータと Scalar の戻り値が返ること・`@ipU` が API キーの利用者になること・無い名前の拡張 SQL が `WriteResultUnknown` になること (`Live/LiveExtendedSqlTest`)
 - セッションの確認: ログインしていない Cookie を送ると認証済みにならないこと。ブラウザでログイン (パスワード + TOTP) したセッションで本人が返ること (Example の SSO で確認。下記)
 - getsite の形・Issues の既定の列・CompletionTime の往復・リンクの値は ID の文字・システムの日時は秒より細かい値を持つ (+1 秒の範囲で当たる)・無い ID の update / delete は 403・JSON でない条件の値は黙って無視される・deletesite は 200
@@ -376,6 +447,23 @@ View に写す葉 (値は ColumnFilterHash に JSON の配列の文字で書く)
   ログアウトで `.CLB.Auth` が消える・SSO を有効にしたままパスワードでもログインできる・管理者は `UserAdmin` で読み書きできる。SSO の一般の利用者が `/Main/UserAdmin` を開くと「不正なアクセスです」
 - 数値の入力欄はプリザンターが返した桁のまま出る (金額 `4800000.0`・作業量 `24.0000`。プリザンターの API の JSON がこの形)
 
+### Example で実物を相手に確かめたこと (2026-11-20・添付・デザイナは Friendly で操作・Web は Playwright のヘッドレスのブラウザ)
+
+- デザイナ: メタ情報の更新で案件 (Projects) に `AttachmentsA` (種類 `Attachments`・表示名「資料」) が足された (前のファイルとの差はこれだけ)。デザインチェックの指摘 0 件・送信
+- 新しい案件で 2 つ選ぶと「未保存」で並びリンクは出ない → 保存で作成と一緒に送られる・保存後は名前・大きさ・ダウンロードのリンク・
+  ダウンロードの中身が一致し `attachment` / `application/octet-stream` / `nosniff`・リンクのクリックで保存される・削除の印と追加 (足したものの取り消し・同じファイルの選び直し) を保存して読み直した画面と API の値が一致・
+  消したファイルのダウンロードは 404・バイナリの中身が一致・10 MB を超えるファイルは「… 10 MB を超えています。」で足さない・
+  URL の Guid を別のレコードの添付に / フィールドを添付でないものに / Id を別のレコードに差し替えると 404・一覧の行は名前だけ・ログインしていないと 401・別のユーザー (同じ権限) はダウンロードできる・
+  添付のある案件の金額の更新で添付は変わらない・楽観ロックで添付の保存も止まる・案件の検索
+- 一覧に添付の列を足すと案件名の列が狭くなる (幅を指定すると一覧がはみ出したので幅は指定していない)
+- 確認用に手元だけで案件にコピーのボタン (CopyModuleButtonField) / 自動保存 (AutoSubmitField) を足したデザインで (リポのデザインは変えていない):
+  コピーすると添付は並ばず (ほかの項目は写る)、保存した新しいレコードの添付は空・元のレコードの添付はそのまま。
+  自動保存で足したファイルはプリザンターに入り、画面では「未保存」と取り消し・削除のボタン・リンクが消える。その後に読んだファイルを消す自動保存はエラーにならない。読み直すと足したファイルも消せる。
+  1 つ目を足した自動保存の要求をブラウザで止めている間に 2 つ目を足すと、次の自動保存は 2 つ目だけを送り、プリザンターと読み直した画面のファイルはちょうど 2 つ (二重にならない)
+- 確認用のデザインで分かった組み合わせ: OptimisticLockingField は AutoSubmitField と併用できない (本体のエラー)。
+  作成日時 (`CreatedTime`) のフィールドがあるモジュールでのレコードのコピーの保存は「読み取り専用の列」のエラーになっていた (コピーが作成日時の値も写すため) → 作成ではキー以外の読み取り専用の列を送らないように変えた (上の「表と列」)。
+  変えた後、作成日時のフィールドを残したまま手元だけでコピーのボタンを足したデザインで、コピー (作成日時も写る) → 保存が通り、新しいレコードの作成日時はプリザンターが決めた値になった
+
 ### 未確認
 
 - 別のホスト (別のドメイン) のプリザンターとの SSO (Cookie の届き方。確認は同じ localhost の別ポートだけ)
@@ -389,19 +477,17 @@ View に写す葉 (値は ColumnFilterHash に JSON の配列の文字で書く)
 - General.json の MinTime を変えた環境 (`EmptyDate`)
 - 拡張 SQL の日付・日時・真偽・null のパラメータ (値の形は偽物のテストだけ)・複数行を返す拡張 SQL・`Api` が false の拡張 SQL の応答
 - コメントの列を画面 (デザイナ・Example) に置いたときの見え方
+- 添付: 子の一覧 (明細) の行に置いたときの動き・SSO の利用者でのダウンロード・数十 MB のファイル (保存の要求の大きさ・プリザンターの上限)・列の `LimitSize` を超えたときの画面の見え方・
+  一覧の列の見出しでの並べ替え (`CanUserSort` が true のままだと条件と同じくエラーになるはず)・デザイナのプロパティの画面の見え方 (撮影できなかった。撮り直しも画面が真っ黒)
 
 ### 未実装 (コネクターが未対応なだけで、プリザンターの制限ではないもの)
 
-- 添付 (`Attachments*`)・ロック (`Locked`)・プロセス・サイトのスクリプト / サーバースクリプトの起動
+- ロック (`Locked`)・プロセス・サイトのスクリプト / サーバースクリプトの起動
+- 添付の名前の変更・並べ替え・画像のプレビュー
 - コメントの編集・削除 (足すだけ)
 - 利用者本人の API キーでの接続 (利用者ごとの認可はプリザンター側では見ない)
 
-### 添付の調査 (2026-11-19・実装はしていない)
+### 添付の調査 (2026-11-19) → 専用のフィールドで実装 (2026-11-20)
 
-- プリザンター: 添付は列 (`AttachmentsA`…) ごとにファイルの並び。get の `AttachmentsHash` はメタ情報 (Guid・Name・Size・ContentType など) だけで中身は無い。
-  中身は `api/binaries/{guid}/get` (Base64 の JSON・契約の設定で添付が許されていること) か `getstream`。書くのは create / update の `AttachmentsHash` (`[{Name, ContentType, Base64}]` で足す・`[{Guid, Deleted: true}]` で消す)
-- 本体の FileField: 1 フィールド 1 ファイル (FileName・FileSize・FileGuid の列、任意で中身の列)。保存の方式 (ストレージ) では中身はホストのファイルストレージ (StorageName + Guid) にあり、
-  `ITemporaryFileManager.FixFile(dataSourceName, guid)` などで管理され、ダウンロードはホストの `FileLocation` 経由。中身が `IDbAccessor` を通らないので、コネクターだけではプリザンターの中身を出せない。
-  中身を DB の列に持つ方式は `IDbAccessor` を通るが、1 ファイルとファイルの並びが合わない・名前 / 大きさ / Guid を仮の列で作る必要がある・一覧で行ごとに binaries/get が要る・差し替えは前のファイルを消す必要がある
-- 本体に足りない口: データソースごとのファイルの読み出し (StorageName + Guid でなくモジュール・Id・フィールドで)・レコードと列が分かる保存の口 (FixFile には無い)・複数ファイルのフィールド・一覧での中身の遅延読み
-- 結論: 本体の口が無いとコネクターだけでは実装できない
+- 本体の FileField は 1 フィールド 1 ファイルで、中身がホストのファイルストレージにあり `IDbAccessor` を通らないので使わない。
+  本体の口を足さずに済むよう、値をファイルの並びの JSON の文字にした専用のフィールドと、ホストが呼ぶダウンロードのメソッド (`GetAttachmentAsync`) にした (上の「添付」)

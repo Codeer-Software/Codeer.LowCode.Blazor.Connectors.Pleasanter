@@ -9,6 +9,10 @@
     {
       "AssemblyName": "Codeer.LowCode.Blazor.Extras",
       "Version": "0.32.0.0"
+    },
+    {
+      "AssemblyName": "Codeer.LowCode.Blazor.Connectors.Pleasanter",
+      "Version": "0.1.0.0"
     }
   ]
 }

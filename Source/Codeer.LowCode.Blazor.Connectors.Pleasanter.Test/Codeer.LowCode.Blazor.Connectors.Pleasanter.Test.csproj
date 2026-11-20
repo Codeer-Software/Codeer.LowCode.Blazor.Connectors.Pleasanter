@@ -18,6 +18,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Codeer.LowCode.Blazor.Connectors.Pleasanter.Server\Codeer.LowCode.Blazor.Connectors.Pleasanter.Server.csproj" />
+    <ProjectReference Include="..\Codeer.LowCode.Blazor.Connectors.Pleasanter\Codeer.LowCode.Blazor.Connectors.Pleasanter.csproj" />
   </ItemGroup>
 
   <ItemGroup>

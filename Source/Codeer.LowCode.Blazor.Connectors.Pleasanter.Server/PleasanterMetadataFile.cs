@@ -83,7 +83,8 @@ namespace Codeer.LowCode.Blazor.Connectors.Pleasanter.Server
 
         PleasanterMetadataFile(string directory, bool isDeployedDesign)
         {
-            _directory = Path.GetFullPath(directory);
+            //空は今のフォルダ (本体が App.zip を探す場所と同じ)
+            _directory = string.IsNullOrEmpty(directory) ? Directory.GetCurrentDirectory() : Path.GetFullPath(directory);
             _isDeployedDesign = isDeployedDesign;
         }
 
@@ -211,9 +212,10 @@ namespace Codeer.LowCode.Blazor.Connectors.Pleasanter.Server
             var tables = new List<PleasanterTableDefinition>();
             foreach (var table in data?.Tables ?? new())
             {
-                if (string.IsNullOrEmpty(table.Name) || table.ReferenceType is not (PleasanterTableDefinition.Results or PleasanterTableDefinition.Issues)) continue;
+                //手で直したファイルの null (要素・Columns) は無いものとして読む
+                if (string.IsNullOrEmpty(table?.Name) || table.ReferenceType is not (PleasanterTableDefinition.Results or PleasanterTableDefinition.Issues)) continue;
                 var definition = new PleasanterTableDefinition { Name = table.Name, SiteId = table.SiteId, ReferenceType = table.ReferenceType, TitleIsRaw = table.TitleIsRaw };
-                foreach (var column in table.Columns.Where(e => !string.IsNullOrEmpty(e.Name)))
+                foreach (var column in (table.Columns ?? new()).Where(e => !string.IsNullOrEmpty(e?.Name)))
                 {
                     definition.Columns.Add(new PleasanterColumnDefinition
                     {

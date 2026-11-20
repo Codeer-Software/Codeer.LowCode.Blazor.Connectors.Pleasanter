@@ -9,7 +9,7 @@
 		<Version>0.1.0</Version>
 		<Authors>Codeer</Authors>
 		<Company>Codeer</Company>
-		<Description>Designer support for Codeer.LowCode.Blazor.Connectors.Pleasanter.Server. Registers the specification document that AI assistants read when designing modules bound to Pleasanter sites, and adds a menu that updates the Pleasanter metadata file.</Description>
+		<Description>Designer support for Codeer.LowCode.Blazor.Connectors.Pleasanter.Server. Registers the specification document that AI assistants read when designing modules bound to Pleasanter sites, adds a menu that updates the Pleasanter metadata file, and puts the Pleasanter attachments field in the toolbox.</Description>
 		<PackageProjectUrl>https://github.com/Codeer-Software/Codeer.LowCode.Blazor.Connectors.Pleasanter</PackageProjectUrl>
 		<RepositoryUrl>https://github.com/Codeer-Software/Codeer.LowCode.Blazor.Connectors.Pleasanter</RepositoryUrl>
 		<RepositoryType>git</RepositoryType>
@@ -28,6 +28,7 @@
 
 	<ItemGroup>
 		<ProjectReference Include="..\Codeer.LowCode.Blazor.Connectors.Pleasanter.Server\Codeer.LowCode.Blazor.Connectors.Pleasanter.Server.csproj" />
+		<ProjectReference Include="..\Codeer.LowCode.Blazor.Connectors.Pleasanter\Codeer.LowCode.Blazor.Connectors.Pleasanter.csproj" />
 	</ItemGroup>
 
 	<ItemGroup>

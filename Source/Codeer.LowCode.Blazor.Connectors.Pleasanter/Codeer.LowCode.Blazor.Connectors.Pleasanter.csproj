@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+
+	<PropertyGroup>
+		<TargetFramework>net8.0</TargetFramework>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<Nullable>enable</Nullable>
+		<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+		<Version>0.1.0</Version>
+		<Authors>Codeer</Authors>
+		<Company>Codeer</Company>
+		<Description>Client-side fields for Codeer.LowCode.Blazor.Connectors.Pleasanter. Includes the Pleasanter attachments field, which lists, downloads, adds and deletes the files of a Pleasanter attachments column.</Description>
+		<PackageProjectUrl>https://github.com/Codeer-Software/Codeer.LowCode.Blazor.Connectors.Pleasanter</PackageProjectUrl>
+		<RepositoryUrl>https://github.com/Codeer-Software/Codeer.LowCode.Blazor.Connectors.Pleasanter</RepositoryUrl>
+		<RepositoryType>git</RepositoryType>
+		<PackageTags>Blazor;LowCode;Codeer;Pleasanter;Connector</PackageTags>
+		<PackageLicenseExpression>MIT</PackageLicenseExpression>
+		<PackageRequireLicenseAcceptance>True</PackageRequireLicenseAcceptance>
+		<PackageReadmeFile>README.md</PackageReadmeFile>
+		<PackageReleaseNotes>Initial release.</PackageReleaseNotes>
+		<PackageId>Codeer.LowCode.Blazor.Connectors.Pleasanter</PackageId>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<!-- テストだけに internal を見せる (製品アセンブリへの IVT は出さない) -->
+		<AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+			<_Parameter1>Codeer.LowCode.Blazor.Connectors.Pleasanter.Test</_Parameter1>
+		</AssemblyAttribute>
+	</ItemGroup>
+
+	<ItemGroup>
+		<PackageReference Include="Codeer.LowCode.Blazor" Version="1.3.70" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<None Include="..\..\README.md" Pack="true" PackagePath="\" />
+		<None Include="..\..\LICENSE" Pack="true" PackagePath="\" />
+	</ItemGroup>
+
+</Project>

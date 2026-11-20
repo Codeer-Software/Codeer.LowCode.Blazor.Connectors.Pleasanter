@@ -8,12 +8,14 @@
 - 一覧・検索・作成・更新・削除はプリザンターの API
 - 認証は連携用の利用者の API キー
 - 選択肢・リンクはデザイナで取り込み、Enum・LinkField として使える
+- 添付ファイルの一覧・ダウンロード・追加・削除ができるフィールドつき
 - プリザンターのログインを使うシングルサインオンの部品つき
 - プリザンター側へのプラグインの配備は不要 (シングルサインオンを使うときだけ、本人を返す拡張 SQL を 1 つ置く)
 
 ## 使い方
 
 アプリ (サーバー) に `Codeer.LowCode.Blazor.Connectors.Pleasanter.Server`、デザイナに `Codeer.LowCode.Blazor.Connectors.Pleasanter.Designer` を追加します。
+添付ファイルのフィールドを使うときは、アプリの画面のプロジェクトに `Codeer.LowCode.Blazor.Connectors.Pleasanter` も追加します (組み込みは [Docs/Pleasanter.md](Docs/Pleasanter.md) の「添付ファイル」)。
 
 データソースにプリザンターの接続を書き (`Sites` に使うサイトを `表名:サイトID` で並べる)、
 

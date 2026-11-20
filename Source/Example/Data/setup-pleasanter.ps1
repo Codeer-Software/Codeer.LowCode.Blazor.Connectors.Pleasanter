@@ -132,10 +132,11 @@ function Get-ProjectsSettings([long] $CustomersId) {
             @{ ColumnName = 'DateA'; LabelText = '受注日'; EditorFormat = 'Ymd' }
             @{ ColumnName = 'CheckA'; LabelText = '確認済' }
             @{ ColumnName = 'DescriptionA'; LabelText = 'メモ' }
+            @{ ColumnName = 'AttachmentsA'; LabelText = '資料' }
         )
         # リンクの列は ChoicesText だけでなく Links にも書く (API で作ったサイトは ChoicesText から Links を作らない。無いとリンクとして扱われない)
         Links            = @(@{ ColumnName = 'ClassA'; SiteId = $CustomersId })
-        EditorColumnHash = @{ General = @('Title', 'ClassA', 'ClassB', 'Status', 'NumA', 'DateA', 'CheckA', 'DescriptionA') }
+        EditorColumnHash = @{ General = @('Title', 'ClassA', 'ClassB', 'Status', 'NumA', 'DateA', 'CheckA', 'DescriptionA', 'AttachmentsA') }
         GridColumns      = @('ResultId', 'Title', 'ClassA', 'ClassB', 'Status', 'NumA', 'DateA', 'CheckA')
     }
 }

@@ -124,14 +124,60 @@ namespace Codeer.LowCode.Blazor.Connectors.Pleasanter.Test.Live
         static MatchConditionBase And(params MatchConditionBase[] children) => MultiMatchCondition.And(children);
 
         [Test]
-        public async Task 読み取り専用の列は書けない()
+        public async Task 読み取り専用の列は更新できず作成ではキーだけ指定できない()
         {
             var e = Assert.ThrowsAsync<PleasanterException>(() => _h.Accessor.ExecuteAsync(TestDesign.DataSourceName,
                 "update \"Customers\" set \"Ver\"=@p0 where \"ResultId\"=@pid0", new() { ["@p0"] = 5m, ["@pid0"] = LiveFixture.Customers["c1"] }))!;
             Assert.That(e.Message, Does.Contain("read-only"));
+            var updateTime = Assert.ThrowsAsync<PleasanterException>(() => _h.Accessor.ExecuteAsync(TestDesign.DataSourceName,
+                "update \"Customers\" set \"CreatedTime\"=@p0 where \"ResultId\"=@pid0", new() { ["@p0"] = new DateTime(2020, 1, 1), ["@pid0"] = LiveFixture.Customers["c1"] }))!;
+            Assert.That(updateTime.Message, Does.Contain("read-only"));
             var insert = Assert.ThrowsAsync<PleasanterException>(() => _h.Accessor.InsertAsync(TestDesign.DataSourceName,
-                "insert into \"Customers\"(\"Title\",\"CreatedTime\") values(@p0,@p1) returning \"ResultId\"", new() { ["@p0"] = "x", ["@p1"] = DateTime.Now }))!;
+                "insert into \"Customers\"(\"Title\",\"ResultId\") values(@p0,@p1) returning \"ResultId\"", new() { ["@p0"] = "x", ["@p1"] = 999999L }))!;
             Assert.That(insert.Message, Does.Contain("read-only"));
+            var c1 = (await LiveFixture.GetRecordAsync(LiveFixture.CustomersId, LiveFixture.Customers["c1"]))!;
+            Assert.That(c1["CreatedTime"]!.GetValue<string>(), Does.Not.StartWith("2020-01-01"));
+        }
+
+        [Test]
+        public async Task 作成ではキー以外の読み取り専用の列の値を送らずプリザンターが決める()
+        {
+            var old = new DateTime(2020, 1, 2, 3, 4, 5);
+            var id = await _h.Accessor.InsertAsync(TestDesign.DataSourceName,
+                "insert into \"Customers\"(\"Title\",\"Ver\",\"Creator\",\"Updator\",\"CreatedTime\",\"UpdatedTime\") values(@p0,@p1,@p2,@p3,@p4,@p5) returning \"ResultId\"",
+                new() { ["@p0"] = "読み取り専用の値つき", ["@p1"] = 9m, ["@p2"] = 999999m, ["@p3"] = 999999m, ["@p4"] = old, ["@p5"] = old });
+            var resultId = long.Parse(id!.ToString()!, CultureInfo.InvariantCulture);
+            var row = (await LiveFixture.GetRecordAsync(LiveFixture.CustomersId, resultId))!;
+            Assert.That(row["Title"]!.GetValue<string>(), Is.EqualTo("読み取り専用の値つき"));
+            Assert.That(row["Ver"]!.GetValue<decimal>(), Is.EqualTo(1m));
+            Assert.That(row["Creator"]!.GetValue<decimal>(), Is.EqualTo((decimal)LiveFixture.ApiUserId));
+            Assert.That(row["Updator"]!.GetValue<decimal>(), Is.EqualTo((decimal)LiveFixture.ApiUserId));
+            Assert.That(row["CreatedTime"]!.GetValue<string>(), Does.Not.StartWith("2020-01-02"));
+            Assert.That(row["UpdatedTime"]!.GetValue<string>(), Does.Not.StartWith("2020-01-02"));
+            AssertSucceeded(await DeleteAsync("Customer", resultId.ToString(CultureInfo.InvariantCulture)));
+
+            //期限付きテーブルの残作業量は作業量と進捗率から計算される
+            var taskId = await _h.Accessor.InsertAsync(TestDesign.DataSourceName,
+                "insert into \"Tasks\"(\"Title\",\"WorkValue\",\"ProgressRate\",\"RemainingWorkValue\") values(@p0,@p1,@p2,@p3) returning \"IssueId\"",
+                new() { ["@p0"] = "残作業量つき", ["@p1"] = 10m, ["@p2"] = 20m, ["@p3"] = 99m });
+            var task = (await LiveFixture.GetRecordAsync(LiveFixture.TasksId, long.Parse(taskId!.ToString()!, CultureInfo.InvariantCulture)))!;
+            Assert.That(task["RemainingWorkValue"]!.GetValue<decimal>(), Is.EqualTo(8m));
+            AssertSucceeded(await DeleteAsync("Task", taskId.ToString()!));
+        }
+
+        [Test]
+        public async Task 作成日時を表示するフィールドの値を写した作成も保存できる()
+        {
+            //レコードのコピー (CopyModuleButtonField) と同じく、更新日時のフィールド (Updated = UpdatedTime) に値を入れて作成する
+            var result = await AddAsync("Customer", e =>
+            {
+                e.Fields["Name"] = new TextFieldData { Value = "コピー" };
+                e.Fields["Updated"] = new DateTimeFieldData { Value = new DateTime(2020, 1, 2, 3, 4, 5) };
+            });
+            AssertSucceeded(result);
+            var read = (await _h.IO.GetListAsync(new SearchCondition("Customer") { Condition = Value("Id.Value", MatchComparison.Equal, result.DestinationId) }, 0)).Items.Single();
+            Assert.That(Field<DateTimeFieldData>(read, "Updated")!.Value, Is.GreaterThan(new DateTime(2025, 1, 1)));
+            AssertSucceeded(await DeleteAsync("Customer", result.DestinationId));
         }
 
         [Test]

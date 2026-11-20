@@ -217,6 +217,35 @@ namespace Codeer.LowCode.Blazor.Connectors.Pleasanter.Server
             using var _ = await SendAsync(SiteUrl(id, "delete"), null, false);
         }
 
+        /// <summary>添付 1 つの中身 (api/binaries/{guid}/get の Response)。</summary>
+        internal sealed record Binary(long ReferenceId, string FileName, byte[] Content);
+
+        /// <summary>
+        /// 添付の中身を読む (api/binaries/{guid}/get)。読み出しなのでやり直す。API キーの利用者はテナント内のどの添付も読めるので、
+        /// 呼ぶ前にレコードと列の添付であることを確かめておく (<see cref="PleasanterDbAccessor.GetAttachmentAsync"/>)。
+        /// 無ければ NotFound の PleasanterException。
+        /// </summary>
+        internal async Task<Binary> GetBinaryAsync(string guid)
+        {
+            if (!PleasanterAttachments.IsGuid(guid)) throw new PleasanterException("The Guid of the attachment is invalid.", PleasanterErrorKind.InvalidRequest);
+            using var json = await SendAsync(Settings.Url + "api/binaries/" + guid + "/get", null, true);
+            if (!json.RootElement.TryGetProperty("Response", out var response) || response.ValueKind != JsonValueKind.Object ||
+                !response.TryGetProperty("Base64", out var base64) || base64.ValueKind != JsonValueKind.String)
+                throw new PleasanterException("Pleasanter: the response of binaries/get has no Response.Base64.", PleasanterErrorKind.Unknown);
+            byte[] content;
+            try
+            {
+                content = Convert.FromBase64String(base64.GetString()!);
+            }
+            catch (FormatException e)
+            {
+                throw new PleasanterException("Pleasanter: the Base64 of the attachment cannot be read.", PleasanterErrorKind.Unknown, e);
+            }
+            var referenceId = response.TryGetProperty("ReferenceId", out var r) && r.TryGetInt64(out var id) ? id : 0;
+            var fileName = response.TryGetProperty("FileName", out var f) && f.ValueKind == JsonValueKind.String ? f.GetString() ?? string.Empty : string.Empty;
+            return new Binary(referenceId, fileName, content);
+        }
+
         /// <summary>
         /// 拡張 SQL を API キーで実行する (POST api/extended/sql)。書き込みとして送る (やり直さない)。
         /// 結果は最初の表の最初の行の列 (名前と値・応答の順)。行が無ければ null。

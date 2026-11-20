@@ -141,6 +141,18 @@
     },
     {
       "Text": "",
+      "RelativeField": "Attachments",
+      "Name": "AttachmentsLabel",
+      "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
+    },
+    {
+      "DbColumn": "AttachmentsA",
+      "DisplayName": "資料",
+      "Name": "Attachments",
+      "TypeFullName": "Codeer.LowCode.Blazor.Connectors.Pleasanter.PleasanterAttachmentsFieldDesign"
+    },
+    {
+      "Text": "",
       "RelativeField": "Created",
       "Name": "CreatedLabel",
       "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.LabelFieldDesign"
@@ -423,6 +435,31 @@
             "Columns": [
               {
                 "Layout": {
+                  "FieldName": "AttachmentsLabel",
+                  "Name": "",
+                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
+                }
+              }
+            ]
+          },
+          {
+            "Columns": [
+              {
+                "Layout": {
+                  "FieldName": "Attachments",
+                  "Name": "",
+                  "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
+                }
+              }
+            ]
+          },
+          {
+            "Margin": {
+              "Bottom": 0
+            },
+            "Columns": [
+              {
+                "Layout": {
                   "FieldName": "TasksLabel",
                   "Name": "",
                   "TypeFullName": "Codeer.LowCode.Blazor.Repository.Design.FieldLayoutDesign"
@@ -492,6 +529,10 @@
           {
             "FieldName": "Confirmed",
             "Width": 90
+          },
+          {
+            "FieldName": "Attachments",
+            "CanUserSort": false
           }
         ]
       ]
